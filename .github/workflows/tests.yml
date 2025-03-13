@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  linux-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 3.13]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies and run tests
+        run: |
+          pip install pytest tox tox-gh-actions
+          tox
+
+  windows-tests:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.10, 3.13]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies and run tests
+        run: |
+          pip install pytest tox tox-gh-actions
+          tox
+
+  macos-tests:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.10, 3.13]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies and run tests
+        run: |
+          pip install pytest tox tox-gh-actions
+          tox
+
+  long-tests:
+    # Run long tests only on Linux to avoid slow builds on all platforms
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 3.13]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install pytest tox tox-gh-actions
+      - name: Run long tests
+        run: tox -e long

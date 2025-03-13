@@ -29,3 +29,8 @@ Homepage = "https://www.biomecardio.com/MUST"
 Repository = "https://github.com/creatis-ULTIM/PyMUST"
 Issues = "https://github.com/creatis-ULTIM/PyMUST/issues"
 
+[tool.pytest.ini_options]
+markers = [
+    "long: marks tests as long (deselect with '-m \"not long\"')",
+]
+
