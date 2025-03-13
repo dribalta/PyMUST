@@ -1,7 +1,12 @@
 from __future__ import annotations
-import numpy as np,scipy, scipy.signal
+
 import itertools
+
+import numpy as np
+import scipy, scipy.signal
+
 from . import utils
+
 def tgc(S: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     %TGC Time-gain compensation for RF or IQ signals

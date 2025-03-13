@@ -1,6 +1,10 @@
-import numpy as np, scipy, scipy.signal, logging
-from . import utils
+import logging
 from typing import Union
+
+import numpy as np
+import scipy, scipy.signal
+
+from . import utils
 
 def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: float = None) -> np.ndarray:
     """

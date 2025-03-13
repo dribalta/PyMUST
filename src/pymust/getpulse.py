@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import numpy as np
+
 from . import utils
 
 def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: float = 1e-09) -> tuple[np.ndarray, np.ndarray]:

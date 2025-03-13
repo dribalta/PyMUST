@@ -1,8 +1,10 @@
 from __future__ import annotations
-import scipy, scipy.interpolate
 from typing import Union
-from . import utils
+
 import numpy as np
+import scipy, scipy.interpolate
+
+from . import utils
 
 def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]  = None, g: Union[np.ndarray, float] = None)  -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """

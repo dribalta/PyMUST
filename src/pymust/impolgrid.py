@@ -1,6 +1,10 @@
-import numpy as np, logging, typing
+import logging
+from typing import Union
+
+import numpy as np
+
 from . import utils
-def impolgrid(siz: typing.Union[int, np.ndarray, list], zmax: float, width: float, param: utils.Param = None):
+def impolgrid(siz: Union[int, np.ndarray, list], zmax: float, width: float, param: utils.Param = None):
     """
     %IMPOLGRID   Polar-type grid for ultrasound images
     %   IMPOLGRID returns a polar-type (fan-type) grid expressed in Cartesian

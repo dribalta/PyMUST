@@ -1,7 +1,12 @@
-from . import utils, pfield
-import numpy as np, scipy, scipy.signal, logging
-import matplotlib.pyplot as plt, matplotlib
+import logging
+
 from matplotlib.animation import FuncAnimation, PillowWriter
+import matplotlib.pyplot as plt
+import matplotlib
+import numpy as np
+import scipy, scipy.signal
+
+from . import utils, pfield
 
 def mkmovie(*varargin):
     """

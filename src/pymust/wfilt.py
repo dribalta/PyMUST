@@ -1,5 +1,7 @@
-import numpy as np,scipy, logging
-import typing
+import logging
+
+import numpy as np
+import scipy
 
 def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
     """

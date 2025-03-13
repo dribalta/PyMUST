@@ -1,9 +1,7 @@
 import numpy as np
 import scipy.optimize, itertools 
 
-import scipy, scipy.interpolate
 from . import  utils
-
 
 def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sparse.spmatrix:
     """

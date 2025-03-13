@@ -1,5 +1,7 @@
 import numpy as np
+
 from . import utils
+
 def bmode(IQ: np.ndarray, DR: float = 40) -> np.ndarray:
 
     """

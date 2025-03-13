@@ -1,6 +1,11 @@
-from . import utils, pfield, getpulse
-import logging, copy, multiprocessing, functools
+import copy
+import functools
+import logging
+# import multiprocessing
+
 import numpy as np 
+
+from . import utils, pfield, getpulse
 
 # pfield wrapper so it is compatible with multiprocessing. Needs to be defined in a global scope
 def pfieldParallel(x: np.ndarray, y: np.ndarray, z: np.ndarray, RC: np.ndarray, delaysTX: np.ndarray, param: utils.Param, options: utils.Options):

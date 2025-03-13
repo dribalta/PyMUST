@@ -1,7 +1,10 @@
-from . import utils
+from __future__ import annotations
+from typing import Union
+
 import numpy as np
 import scipy.optimize
-from __future__ import annotations
+
+from . import utils
 
 def txdelay3Plane(param: utils.Param, tiltx: float, tilty: float) -> np.ndarray:
     return txdelay3(param, tiltx, tilty)
@@ -9,7 +12,7 @@ def txdelay3Plane(param: utils.Param, tiltx: float, tilty: float) -> np.ndarray:
 def txdelay3Diverging(param: utils.Param, tiltx: float, tilty: float, omega: float) -> np.ndarray:
     return txdelay3(param, tiltx, tilty, omega)
 
-def txdelay3Focused(param: utils.Param, x: float|np.ndarray, y: float|np.ndarray, z: float|np.ndarray) -> np.ndarray:
+def txdelay3Focused(param: utils.Param, x: Union[float,np.ndarray], y: Union[float,np.ndarray], z: Union[float,np.ndarray]) -> np.ndarray:
     return txdelay3(x, y, z, param)
 
 def txdelay3(*args):

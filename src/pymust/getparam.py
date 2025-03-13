@@ -1,6 +1,6 @@
 import numpy as np
-from . import utils
 
+from . import utils
 
 def getparam(probe: str) -> utils.Param:
     #GETPARAM   Get parameters of a uniform linear or convex array

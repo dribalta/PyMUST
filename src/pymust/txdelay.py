@@ -1,5 +1,6 @@
-from . import utils
 import numpy as np
+
+from . import utils
 
 def txdelayCircular(param: utils.Param, tilt: float, width: float) -> np.ndarray:
     return txdelay(param, tilt, width)

@@ -1,17 +1,22 @@
 from __future__ import annotations
-import scipy, numpy as np, typing, logging
+
+import logging
+from typing import Optional
+
+import numpy as np
+import scipy
+
 from . import utils
 
-
 def smoothn(y: np.ndarray,
-            W: typing.Optional[np.ndarray] = None,
-            S: typing.Optional[float] = None,
-            axis: typing.Optional[np.ndarray] = None, # Use this to specify the axis indicating multicomponent data
-            TolZ: typing.Optional[float] = 1e-3,
-            MaxIter: typing.Optional[int] = 100,
-            Initial: typing.Optional[np.ndarray] = None,
-            Spacing: typing.Optional[np.ndarray] = None,
-            Order: typing.Optional[int] = 2,
+            W: Optional[np.ndarray] = None,
+            S: Optional[float] = None,
+            axis: Optional[np.ndarray] = None, # Use this to specify the axis indicating multicomponent data
+            TolZ: Optional[float] = 1e-3,
+            MaxIter: Optional[int] = 100,
+            Initial: Optional[np.ndarray] = None,
+            Spacing: Optional[np.ndarray] = None,
+            Order: Optional[int] = 2,
             Weight: str = 'bisquare',
             isrobust: bool = False ) -> tuple[np.ndarray, float, bool]:
     """

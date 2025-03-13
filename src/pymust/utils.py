@@ -1,8 +1,14 @@
-import numpy as np, scipy, scipy.interpolate, multiprocessing, multiprocessing.pool
 from abc import ABC
-import inspect, matplotlib, pickle, os, matplotlib.pyplot as plt, copy
 from collections import deque
+import copy
+import inspect
+import multiprocessing, multiprocessing.pool
+import os
+import pickle
 
+import matplotlib, matplotlib.pyplot as plt, copy
+import numpy as np
+import scipy, scipy.interpolate
 
 class dotdict(dict, ABC):
     """Copied from https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary"""

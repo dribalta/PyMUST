@@ -1,8 +1,11 @@
 from __future__ import annotations
-import logging
-from . import utils, smoothn
-import numpy as np, scipy
 
+# import logging
+
+import numpy as np
+import scipy
+
+from . import utils, smoothn
 
 def sptrack(I: np.ndarray, param: utils.Param) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
