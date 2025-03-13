@@ -1,8 +1,9 @@
-name: CI
+name: Test and Build
 
 on:
   push:
-    branches: [ main ]
+    branches: 
+      "feature/tests"
   pull_request:
     branches: [ main ]
   workflow_dispatch:
