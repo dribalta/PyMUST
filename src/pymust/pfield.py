@@ -561,6 +561,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #%-- FREQUENCY SAMPLES
     Nf = int(2*np.ceil(param.fc/df)+1) # number of frequency samples
     f = np.linspace(0,2*param.fc,Nf) # frequency samples
+    param.f = f.copy()
     df = f[1]  #% update the frequency step
     #%- we keep the significant components only by using options.dBThresh
     S = np.abs(pulseSpectrum(2*np.pi*f)*probeSpectrum(2*np.pi*f))
