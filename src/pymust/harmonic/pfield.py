@@ -55,6 +55,7 @@ def pfield(xbound, zbound, delaysTX : np.ndarray, param: utils.Param, options : 
     X,Z = np.meshgrid(x,z)
     
     _, P_SPECT, IDX = linear_pfield(X,None, Z,delaysTX,param,options=options if options else None)
+    _ = None # free memory NOTE Test vs "del"
     
     # Compute the square
     L = P_SPECT.shape[2]
