@@ -20,6 +20,7 @@ from .getpulse import getpulse
 from .smoothn import smoothn
 from .sptrack import sptrack
 from . import harmonic
+from . import interpolated
 
 # Missing functions: genscat, speckletracking, cite + visualisation
 # Visualisation: pcolor, Doppler color map + transparency, radiofrequency data

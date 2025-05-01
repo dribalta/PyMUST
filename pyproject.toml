@@ -21,6 +21,7 @@ dependencies = [
   "matplotlib",
   "numpy",
   "scipy",
+  tqdm",
 ]
 dynamic = ["license", "version"]
 

@@ -11,7 +11,6 @@ import numpy as np
 from scipy.special import hankel1
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import cKDTree
-import functools
 import inspect
 
 # --- Registry for Interpolation Methods ---
@@ -75,6 +74,11 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
 
     if "scatterers" in required_args:
         required_args.remove("scatterers") # scatterers will be prepared separately
+    if "grid_points" in required_args:
+        required_args.remove("grid_points")
+        needs_points = True
+    else:
+        needs_points = False
     
     # --- Argument Presence Check ---
     missing_args = []
@@ -85,7 +89,6 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
         raise ValueError(f"Interpolator '{interpolator_name}' requires argument(s): {', '.join(missing_args)}, but they were not provided (were None).")
 
     # --- Extract and Check Provided Arguments ---
-    grid_points = kwargs.get('grid_points')
     grid_values = kwargs.get('grid_values')
     x_scatterers = kwargs.get('x_scatterers')
     z_scatterers = kwargs.get('z_scatterers')
@@ -128,27 +131,7 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
             raise TypeError("z_range must be a 1D numpy array.")
         n_z = len(z_range)
 
-    # Grid shape checks and potential flattening
-    grid_points_flat = grid_values_flat = n_grid_points = None
-
-    if grid_points is not None:
-        if not isinstance(grid_points, np.ndarray):
-            raise TypeError("grid_points must be a numpy array.")
-        if grid_points.ndim == 3: # Assume (nz, nx, 2)
-            if grid_points.shape[2] != 2:
-                raise ValueError(f"3D grid_points must have shape (nz, nx, 2), got {grid_points.shape}")
-            if n_z is not None and grid_points.shape[0] != n_z:
-                raise ValueError(f"grid_points dimension 0 ({grid_points.shape[0]}) doesn't match len(z_range) ({n_z})")
-            if n_x is not None and grid_points.shape[1] != n_x:
-                raise ValueError(f"grid_points dimension 1 ({grid_points.shape[1]}) doesn't match len(x_range) ({n_x})")
-            n_grid_points = grid_points.shape[0] * grid_points.shape[1]
-        elif grid_points.ndim == 2: # Assume already flat (N, 2)
-             if grid_points.shape[1] != 2:
-                raise ValueError(f"2D grid_points must have shape (N, 2), got {grid_points.shape}")
-             n_grid_points = grid_points.shape[0]
-        else:
-            raise ValueError("grid_points must be a 2D or 3D array.")
-
+    # Grid shape checks
     if grid_values is not None:
         if not isinstance(grid_values, np.ndarray):
             raise TypeError("grid_values must be a numpy array.")
@@ -159,25 +142,28 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
                 raise ValueError(f"grid_values dimension 1 ({grid_values.shape[1]}) doesn't match len(x_range) ({n_x})")
             if n_freq is not None and grid_values.shape[2] != n_freq:
                 raise ValueError(f"grid_values dimension 2 ({grid_values.shape[2]}) doesn't match len(freqs) ({n_freq})")
-            current_n_grid_points = grid_values.shape[0] * grid_values.shape[1]
-            if n_grid_points is not None and current_n_grid_points != n_grid_points:
-                 raise ValueError(f"Mismatch in number of grid points between grid_points ({n_grid_points}) and grid_values ({current_n_grid_points})")
-            n_grid_points = current_n_grid_points
+            if needs_flattening:
+                grid_values = grid_values.reshape(n_z * n_x, -1) # Flatten to (N, n_freq)         
         elif grid_values.ndim == 2: # Assume already flat (N, n_freq)
             if n_freq is not None and grid_values.shape[1] != n_freq:
                  raise ValueError(f"2D grid_values dimension 1 ({grid_values.shape[1]}) doesn't match len(freqs) ({n_freq})")
-            current_n_grid_points = grid_values.shape[0]
-            if n_grid_points is not None and current_n_grid_points != n_grid_points:
-                 raise ValueError(f"Mismatch in number of grid points between grid_points ({n_grid_points}) and grid_values ({current_n_grid_points})")
-            n_grid_points = current_n_grid_points
+            if not needs_flattening:
+                grid_values = grid_values.reshape(n_z, n_x, -1)
         else:
             raise ValueError("grid_values must be a 2D or 3D array.")
 
+    # --- Create grid_points if needed ---
+    if needs_points:
+        grid_points = np.array(np.meshgrid(z_range, x_range)).T
+        if needs_flattening:
+            grid_points = grid_points.reshape(-1, 2)
+    else:
+        grid_points = None
     # --- Prepare Arguments for the Specific Interpolator ---
     available_args = {
         # Use consistent names that target functions expect
-        'grid_points': grid_points.reshape(n_grid_points, 2) if needs_flattening else grid_points, # Pass flat/original based on need
-        'grid_values': grid_values.reshape(n_grid_points, -1) if needs_flattening else grid_values, # Pass flat/original based on need
+        'grid_points': grid_points, # Pass flat/original based on need
+        'grid_values': grid_values, # Pass flat/original based on need
         'scatterers': scatterers,
         'x_range': x_range,
         'z_range': z_range,
@@ -192,7 +178,7 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
     return interp_func, call_args
 
 
-def interpolate_spectrum(interpolator_name, *, grid_points=None, grid_values=None, x_scatterers=None, z_scatterers=None, x_range=None, z_range=None, param=None, freqs=None):
+def interpolate_spectrum(interpolator_name, *, grid_values=None, x_scatterers=None, z_scatterers=None, x_range=None, z_range=None, param=None, freqs=None):
     """
     Central dispatcher for grid interpolation.
 
@@ -200,11 +186,8 @@ def interpolate_spectrum(interpolator_name, *, grid_points=None, grid_values=Non
     specified interpolation function.
 
     Args:
-        interpolator_name (str): Name of the registered interpolation method.
-        grid_points (ndarray): Grid coordinates. Can be:
-            - (nz, nx, 2) array.
-            - (N, 2) array (pre-flattened).
-            Defaults to None.
+        interpolator_name (str): Name of the registered interpolation method. 
+            Example: 'linear', 'nearest', 'linear_mag_nearest_phase', 'green'.
         grid_values (ndarray): Complex spectrum values on the grid. Can be:
             - (nz, nx, n_freq) array.
             - (N, n_freq) array (pre-flattened).
@@ -228,7 +211,6 @@ def interpolate_spectrum(interpolator_name, *, grid_points=None, grid_values=Non
     # Validate inputs and prepare arguments for the specific function
     interp_func, call_args = _validate_and_prepare_inputs(
         interpolator_name,
-        grid_points=grid_points,
         grid_values=grid_values,
         x_scatterers=x_scatterers,
         z_scatterers=z_scatterers,
@@ -339,22 +321,20 @@ def linear_magnitude_nearest_phase(grid_points, grid_values, scatterers, x_range
     if grid_points.shape != (nz, nx, 2):
         raise ValueError(f"Shape of 'grid_points' must be (nz, nx, 2), got {grid_points.shape}.")
 
-    # Ensure scatterers are in the correct format (z, x) for RegularGridInterpolator
-    scatterers_zx = scatterers[:, ::-1]  # Swap columns to [z, x]
-
     # 1. Linear interpolation for magnitude
     magnitude = np.abs(grid_values)
     interpolator_mag = RegularGridInterpolator(
         (z_range, x_range), magnitude,
         method='linear', bounds_error=False, fill_value=0.0
     )
-    interpolated_magnitude = interpolator_mag(scatterers_zx)
+    interpolated_magnitude = interpolator_mag(scatterers)
+    magnitude = interpolator_mag = None # Free up memory
 
     # 2. Nearest neighbor for phase
     # Flatten grid_points and grid_values for KDTree
-    flat_grid_points = grid_points.reshape(-1, 2)  # (N, 2) where N = nz * nx
+    grid_points = grid_points.reshape(-1, 2)  # (N, 2) where N = nz * nx
     flat_phase = np.angle(grid_values).reshape(-1, n_freq)  # (N, n_freq)
-    tree = cKDTree(flat_grid_points)
+    tree = cKDTree(grid_points)
     _, indices = tree.query(scatterers)
     interpolated_phase = flat_phase[indices, :]  # Phase from nearest grid point
 
