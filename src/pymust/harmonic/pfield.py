@@ -75,7 +75,7 @@ def pfield(xbound, zbound, delaysTX : np.ndarray, param: utils.Param, options : 
         # Compute an attenuation-dependent term.
         kwa = param.attenuation / 8.69 * (w / (2 * np.pi)) / 1e6 * 1e2
         # Apply attenuation
-        G *= np.exp(-kwa * D_kernel) * np.exp(-kwa * Z)
+        G *= np.exp(-kwa * D_kernel)
         # Convolution
         P1_conv = scipy.signal.fftconvolve(P02[:, :, k], G, mode='same')
         # Multiply by a frequency-dependent factor and scale by grid spacing.
