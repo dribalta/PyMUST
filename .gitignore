@@ -189,3 +189,4 @@ src/pymust.egg-info/*
 *.gif
 /tutorials/ExportedNB
 /tutorials/slides
+dev_test/*
