@@ -14,7 +14,6 @@ from .txdelay import txdelay, txdelayCircular, txdelayPlane, txdelayFocused
 from .txdelay3 import txdelay3, txdelay3Plane, txdelay3Diverging, txdelay3Focused
 from .utils import getDopplerColorMap
 from .genscat import genscat
-from .genscat import genscat
 from .mkmovie import mkmovie
 from .getpulse import getpulse
 from .smoothn import smoothn

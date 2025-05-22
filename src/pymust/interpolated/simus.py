@@ -7,7 +7,7 @@ from .methods import interpolate_spectrum
 _EPS = np.finfo(np.float32).eps
 mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
 
-def simus(x_range, z_range, P_SPECT_grid, x_scatterers, z_scatterers, interpolator_name, freqs, RC, param, harmonic=False, debug=False, just_RF_spectrum=False):
+def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_scatterers:np.ndarray, z_scatterers:np.ndarray, interpolator_name:str, freqs:np.ndarray, RC:np.ndarray, param:Param, harmonic:bool=False, debug:bool=False, just_RF_spectrum:bool=False):
     """
     Simulates RF signals by interpolating a spectral grid onto scatterers.
 
