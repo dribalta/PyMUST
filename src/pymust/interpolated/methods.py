@@ -7,11 +7,12 @@ and calling the appropriate registered interpolation function.
 
 Interpolation functions are registered using the @register_interpolator decorator.
 """
+import inspect
+
 import numpy as np
 from scipy.special import hankel1
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import cKDTree
-import inspect
 
 # --- Registry for Interpolation Methods ---
 
@@ -79,7 +80,7 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
         needs_points = True
     else:
         needs_points = False
-    
+
     # --- Argument Presence Check ---
     missing_args = []
     for req_arg in required_args:
@@ -96,7 +97,7 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
     z_range = kwargs.get('z_range')
     param = kwargs.get('param')
     freqs = kwargs.get('freqs')
-    
+
     # --- Validate and Prepare Scatterer Positions ---
     if x_scatterers is None and z_scatterers is None:
         scatterers = None
@@ -143,10 +144,10 @@ def _validate_and_prepare_inputs(interpolator_name, **kwargs):
             if n_freq is not None and grid_values.shape[2] != n_freq:
                 raise ValueError(f"grid_values dimension 2 ({grid_values.shape[2]}) doesn't match len(freqs) ({n_freq})")
             if needs_flattening:
-                grid_values = grid_values.reshape(n_z * n_x, -1) # Flatten to (N, n_freq)         
+                grid_values = grid_values.reshape(n_z * n_x, -1) # Flatten to (N, n_freq)
         elif grid_values.ndim == 2: # Assume already flat (N, n_freq)
             if n_freq is not None and grid_values.shape[1] != n_freq:
-                 raise ValueError(f"2D grid_values dimension 1 ({grid_values.shape[1]}) doesn't match len(freqs) ({n_freq})")
+                raise ValueError(f"2D grid_values dimension 1 ({grid_values.shape[1]}) doesn't match len(freqs) ({n_freq})")
             if not needs_flattening:
                 grid_values = grid_values.reshape(n_z, n_x, -1)
         else:
@@ -207,7 +208,7 @@ def interpolate_spectrum(interpolator_name, *, grid_values=None, x_scatterers=No
                     or shapes are inconsistent.
         TypeError: If inputs are not numpy arrays where expected.
     """
-    
+
     # Validate inputs and prepare arguments for the specific function
     interp_func, call_args = _validate_and_prepare_inputs(
         interpolator_name,
@@ -284,7 +285,7 @@ def nearest_neighbor(grid_points, grid_values, scatterers):
         ndarray: (n_scatterers, n_freq) complex spectrum interpolated at scatterer locations.
     """
     if grid_points.ndim != 2 or grid_values.ndim != 2:
-         raise ValueError(f"'nearest' interpolator expects 2D flattened grid_points and grid_values, got shapes {grid_points.shape} and {grid_values.shape}")
+        raise ValueError(f"'nearest' interpolator expects 2D flattened grid_points and grid_values, got shapes {grid_points.shape} and {grid_values.shape}")
 
     # Build a KD-tree for efficient nearest neighbor search
     tree = cKDTree(grid_points)
@@ -366,7 +367,7 @@ def green_function_interpolation(grid_points, grid_values, scatterers, x_range, 
         ndarray: (n_scatterers, n_freq) complex spectrum interpolated at scatterer locations.
     """
     if grid_points.ndim != 2 or grid_values.ndim != 2:
-         raise ValueError(f"'green' interpolator expects 2D flattened grid_points/values, got shapes {grid_points.shape} and {grid_values.shape}")
+        raise ValueError(f"'green' interpolator expects 2D flattened grid_points/values, got shapes {grid_points.shape} and {grid_values.shape}")
 
     n_x = len(x_range)
     n_z = len(z_range)
@@ -376,7 +377,7 @@ def green_function_interpolation(grid_points, grid_values, scatterers, x_range, 
     if not hasattr(param, 'c'):
         raise AttributeError("Parameter object 'param' must have attribute 'c' (speed of sound).")
     if grid_values.shape[0] != n_x * n_z:
-         raise ValueError("Shape of flattened 'grid_values' does not match dimensions from x_range and z_range.")
+        raise ValueError("Shape of flattened 'grid_values' does not match dimensions from x_range and z_range.")
 
     # --- Pre-calculations ---
     w = 2 * np.pi * freqs

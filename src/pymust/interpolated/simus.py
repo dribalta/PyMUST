@@ -1,3 +1,5 @@
+# pylint: disable=expression-not-assigned, unnecessary-lambda-assignment
+
 import numpy as np
 import tqdm
 
@@ -7,7 +9,7 @@ from .methods import interpolate_spectrum
 _EPS = np.finfo(np.float32).eps
 mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
 
-def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_scatterers:np.ndarray, z_scatterers:np.ndarray, interpolator_name:str, freqs:np.ndarray, RC:np.ndarray, param:Param, harmonic:bool=False, debug:bool=False, just_RF_spectrum:bool=False):
+def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_scatterers: np.ndarray, z_scatterers: np.ndarray, interpolator_name: str, freqs: np.ndarray, RC: np.ndarray, param: Param, harmonic: bool = False, debug: bool = False, just_RF_spectrum: bool = False, lowResources: bool = False):
     """
     Simulates RF signals by interpolating a spectral grid onto scatterers.
 
@@ -44,12 +46,17 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
                       Defaults to False.
         just_RF_spectrum (bool): If True, skips the inverse FFT step and returns the
                                  RF spectrum directly. Defaults to False.
+        lowResources (bool): If True, reduces memory usage by switching to complex64 precision.
+                             Defaults to False.
     Returns:
         tuple[ndarray, ndarray]:
             - RF (ndarray): 2D array (n_time_samples, Nelements) of time-domain RF signals.
             - RF_SPECT (ndarray): 2D array (n_freq, Nelements) of complex spectrum at
                                   the transducer elements before IFFT.
     """
+    # Define complex number type based on lowResources
+    dtype_complex = np.complex64 if lowResources else np.complex128
+
     print(f"Starting RF simulation from spectral grid using '{interpolator_name}' interpolator.") if debug else None
 
     # --- Input Validation ---
@@ -58,12 +65,12 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
     print(f"Processing {n_scatterers} scatterers.") if debug else None
 
     if not isinstance(param, Param):
-         raise TypeError("`param` must be a valid Param object.")
+        raise TypeError("`param` must be a valid Param object.")
     required_attrs = ['c', 'fc', 'Nelements', 'width', 'attenuation']
     for attr in required_attrs:
         if not hasattr(param, attr):
             raise AttributeError(f"Parameter object 'param' missing required attribute: {attr}")
-    
+
     # Ensure RC is a column vector matching scatterers
     if RC is None:
         RC = np.ones((n_scatterers, 1), dtype=np.float32)
@@ -89,14 +96,14 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
         z_range=z_range,
         param=param,
         freqs=freqs
-    )
+    ).astype(dtype_complex)
 
     print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}") if debug else None
 
     del P_SPECT_grid # Free up memory from the potentially large grid
 
     # --- 2. Prepare for RF Signal Computation ---
-    RF_SPECT = np.zeros((n_freq, param.Nelements), dtype=np.complex128)
+    RF_SPECT = np.zeros((n_freq, param.Nelements), dtype=dtype_complex)
 
     # Re-emitted spectral pressure field at each scatterer location
     P_reemitted = RC * P_SPECT_scatterers  # Shape: (n_scatterers, n_freq)
@@ -113,7 +120,7 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
     # Reshape xs, zs for broadcasting: (n_scatterers, 1) vs (1, Nelements)
     dxi = xs[:, np.newaxis] - xe[np.newaxis, :] # Shape (n_scatterers, Nelements)
     dzi = zs[:, np.newaxis] - ze[np.newaxis, :] # Shape (n_scatterers, Nelements)
-    r = np.sqrt(dxi**2 + dzi**2).astype(np.float32) # Shape (n_scatterers, Nelements)
+    r = np.sqrt(dxi**2 + dzi**2).astype(np.float64) # Shape (n_scatterers, Nelements)
 
     # Angle relative to element normal (accounts for element orientation THe)
     angles_rel_z = np.arcsin(np.clip(dxi / (r + _EPS), -1.0, 1.0))
@@ -126,19 +133,19 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
     print("Computing spectral response at transducer elements.") if debug else None
     alpha_dB = param.attenuation
 
-    for i, freq in (enumerate(freqs) if not debug else tqdm(enumerate(freqs), total=n_freq, desc="Processing Frequencies")):
+    for i, freq in (enumerate(freqs) if not debug else tqdm.tqdm(enumerate(freqs), total=n_freq, desc="Processing Frequencies")):
         kw = 2 * np.pi * freq / param.c # wavenumber for the current frequency.
         kwa = (alpha_dB / 8.69) * (freq / 1e6) * 1e2 #  attenuation-based wavenumber
-        
+
         # Compute the Green's function propagation factor:
-        EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)).astype(np.complex64) / np.sqrt(r)
-        
+        EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)).astype(dtype_complex) / np.sqrt(r)
+
         # Directivity
         DIR_argument = kw * param.width / 2 * sinTh
-        DIR = mysinc(DIR_argument) 
+        DIR = mysinc(DIR_argument)
 
         # Propagation
-        propagation = EXP * DIR # Shape: (n_scatterers, n_elements)
+        propagation = EXP * DIR # Shape: (n_scatterers, Nelements)
 
         # Summation and Probe Response
         received_spectrum = P_reemitted[:, i].reshape(1, -1) @ propagation
@@ -147,7 +154,7 @@ def simus(x_range:np.ndarray, z_range:np.ndarray, P_SPECT_grid:np.ndarray, x_sca
         else:
             probe_resp = probeFunction(2 * np.pi * (freq - param.fc)) # For harmonic, filter around 2 times the fc
         RF_SPECT[i, :] = probe_resp * received_spectrum.flatten()
-    
+
     if just_RF_spectrum:
         return None, RF_SPECT
 
