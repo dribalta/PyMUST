@@ -1,4 +1,4 @@
-# pylint: disable=expression-not-assigned, unnecessary-lambda-assignment
+# pylint: disable=unnecessary-lambda-assignment
 
 import numpy as np
 import tqdm
@@ -57,12 +57,12 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     # Define complex number type based on lowResources
     dtype_complex = np.complex64 if lowResources else np.complex128
 
-    print(f"Starting RF simulation from spectral grid using '{interpolator_name}' interpolator.") if debug else None
+    if debug: print(f"Starting RF simulation from spectral grid using '{interpolator_name}' interpolator.")
 
     # --- Input Validation ---
     n_scatterers = len(x_scatterers)
     n_freq = len(freqs)
-    print(f"Processing {n_scatterers} scatterers.") if debug else None
+    if debug: print(f"Processing {n_scatterers} scatterers.")
 
     if not isinstance(param, Param):
         raise TypeError("`param` must be a valid Param object.")
@@ -85,7 +85,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         raise TypeError("RC must be None, a scalar, or a numpy array.")
 
     # --- 1. Interpolate the grid spectrum at the scatterer positions ---
-    print("Calling interpolation dispatcher.") if debug else None
+    if debug: print("Calling interpolation dispatcher.")
 
     P_SPECT_scatterers = interpolate_spectrum(
         interpolator_name=interpolator_name,
@@ -98,7 +98,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         freqs=freqs
     ).astype(dtype_complex)
 
-    print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}") if debug else None
+    if debug: print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}")
 
     del P_SPECT_grid # Free up memory from the potentially large grid
 
@@ -109,7 +109,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     P_reemitted = RC * P_SPECT_scatterers  # Shape: (n_scatterers, n_freq)
 
     # --- 3. Compute Geometry and Propagation ---
-    print("Calculating geometry and propagation paths.") if debug else None
+    if debug: print("Calculating geometry and propagation paths.")
     xs = x_scatterers
     zs = z_scatterers
 
@@ -130,7 +130,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     probeFunction = param.getProbeFunction()
 
     # --- 4. Compute Spectral Response at Transducer (Loop over Frequencies) ---
-    print("Computing spectral response at transducer elements.") if debug else None
+    if debug: print("Computing spectral response at transducer elements.")
     alpha_dB = param.attenuation
 
     for i, freq in (enumerate(freqs) if not debug else tqdm.tqdm(enumerate(freqs), total=n_freq, desc="Processing Frequencies")):
@@ -159,12 +159,12 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         return None, RF_SPECT
 
     # --- 5. Reconstruct Time-Domain RF Signals (Inverse FFT) ---
-    print("Performing Inverse FFT to get time-domain RF signals.") if debug else None
+    if debug: print("Performing Inverse FFT to get time-domain RF signals.")
     param.fs = 8 * param.fc
 
     nf = int(np.ceil(param.fs/(freqs[1] - freqs[0])))
     RF = np.fft.irfft(np.conj(RF_SPECT), n=nf, axis=0)
     RF = RF[: (nf + 1) // 2] # Take only the first half of the RF signal
 
-    print(f"Simulation complete. RF signal shape: {RF.shape}") if debug else None
+    if debug: print(f"Simulation complete. RF signal shape: {RF.shape}")
     return RF, RF_SPECT
