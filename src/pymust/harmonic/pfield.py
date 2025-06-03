@@ -11,7 +11,8 @@ from .. import pfield as linear_pfield
 
 def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
         param: utils.Param, options: utils.Options = None, * ,
-        lowResources = False, DR = None, debug = False,
+        lowResources: bool = False, reducedKernel: bool = False,
+        debug: bool = False, DR: int = 30,
         auxiliary_returns: Iterable[str] = None):
     """
     Initial implementation of the harmonic (non-linear) field.
@@ -24,8 +25,12 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     else:
         auxiliary_returns = set()
 
-    # Assert that DR is a positive number
-    if DR is not None: assert utils.isnumeric(DR) and DR > 0, "DR must be a positive number."
+    # Assert that reducedKernel is a bool
+    assert isinstance(reducedKernel, bool), "reducedKernel must be a boolean."
+    if reducedKernel:
+        assert utils.isnumeric(DR) and DR > 0, "DR must be a positive integer."
+    # Assert that lowResources is a bool
+    assert isinstance(lowResources, bool), "lowResources must be a boolean."
     # Define complex number type based on lowResources
     dtype_complex = np.complex64 if lowResources else np.complex128
 
@@ -87,34 +92,33 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     # This was important because in the previous version, I was doing the convolution of the full spectra, hence there were low frequencies generated that would be filtered out later.
     ws_P02 = 2* np.pi * fs
 
-    # if DR:
-        # # Select the points above a certain number of dB (based on the DR)
-        # IDX_P = np.any(to_decibel(np.abs(P02_SPECT_compact)) > - DR , axis = 2)
-        # P02_SPECT_compact = P02_SPECT_compact[IDX_P, :].reshape(-1, P02_SPECT_compact.shape[2])
-        # X = X[IDX_P].reshape(-1, 1)
-        # Z = Z[IDX_P].reshape(-1, 1)
 
     D_kernel = np.sqrt((X-X.mean() + dx/2)**2+(Z-Z.mean() + dz/2)**2)
     P1_SPECT = np.zeros_like(P02_SPECT_compact, dtype=dtype_complex)
 
     for k, w  in enumerate(ws_P02): # NOTE Could be parallelized
+        if reducedKernel:
+            nPointsKeep = DR/(param.attenuation * dx *fs[k]/1e4) # dx is in m, fs is in Hz, attenuation is in dB/cm/MHz
+            D_kernel_effective, kernel_xbound, kernel_ybound = reduceSizeKernel(D_kernel, nPointsKeep)
+            xslice = slice(kernel_xbound[0], kernel_xbound[1])
+            zslice = slice(kernel_ybound[0], kernel_ybound[1])
+        else:
+            D_kernel_effective = D_kernel
+            xslice = slice(None)
+            zslice = slice(None)
+
         k_wave = w / c
         # Compute the Green's function
-        G = (1j / 4 * scipy.special.hankel1(0, k_wave * D_kernel)).astype(dtype_complex)
+        G = (1j / 4 * scipy.special.hankel1(0, k_wave * D_kernel_effective)).astype(dtype_complex)
         # Compute an attenuation-dependent term.
         kwa = param.attenuation / 8.69 * (w / (2 * np.pi)) / 1e6 * 1e2
         # Apply attenuation
-        G *= np.exp(-kwa * D_kernel).astype(dtype_complex)
+        G *= np.exp(-kwa * D_kernel_effective)
         # Convolve
-        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[:,:,k], G, mode='same').astype(dtype_complex)
-        # Multiply by a frequency-dependent factor and scale by grid spacing.
-        P1_SPECT[:,:,k] = (w / 2) ** 2 * dx * dz * P1_conv
+        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[xslice,zslice,k], G, mode='same') # DEBUG, check if :,: is correct or if it should be xslice,zslice
 
-    # if DR:
-    #     # NOTE: if this creates RAM issues, we can use a sparse matrix (from scipy.sparse.coo_matrix)
-    #     P1_SPECT_full = np.zeros([*IDX_P.shape, P02_SPECT_compact.shape[1]], dtype=dtype_complex)
-    #     P1_SPECT_full[IDX_P, :] = P1_SPECT
-    #     P1_SPECT = P1_SPECT_full
+        # Multiply by a frequency-dependent factor and scale by grid spacing.
+        P1_SPECT[xslice,zslice,k] = (w / 2) ** 2 * dx * dz * P1_conv
 
     P1 = np.linalg.norm(P1_SPECT, axis = 2)
 
@@ -133,4 +137,19 @@ def range_matlab(x):
 
 def to_decibel(x):
     """Convert linear scale to decibel scale."""
-    return 10 * np.log10(np.abs(x)/np.max(x) + 1e-10)
+    x = np.asarray(x)
+    eps = np.finfo(x.dtype).eps
+    return 20*np.log10(np.abs(x)/(np.max(np.abs(x)) + eps) + eps)
+
+def reduceSizeKernel(kernel, nPointsKeep = 50):
+    """
+    Make the kernel smaller, by keeping only the central part.
+    """
+    if kernel.shape[0] <= nPointsKeep:
+        return kernel, (0, kernel.shape[0]), (0, kernel.shape[1])
+    else:
+        mid_x = kernel.shape[0]//2
+        mid_y = kernel.shape[1]//2
+        xbound = (int(mid_x - nPointsKeep//2), int(mid_x + nPointsKeep//2))
+        ybound = (int(mid_y - nPointsKeep//2), int(mid_y + nPointsKeep//2))
+        return kernel[xbound[0]:xbound[1], ybound[0]:ybound[1]], xbound, ybound

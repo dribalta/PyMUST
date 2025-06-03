@@ -76,7 +76,6 @@ def getparam(probe: str) -> utils.Param:
     param = utils.Param()
     probe = probe.upper()
 
-
     # from computeTrans.m (Verasonics, version post Aug 2019)
     if 'L11-5V' == probe:
         # --- L11-5v (Verasonics) ---
@@ -170,7 +169,28 @@ def getparam(probe: str) -> utils.Param:
         param.pitch = 0.000218
         param.Nelements = 64
         param.bandwidth = 2 / 3 * 100
+    # NOTE: Philips probes for Harmonic imaging test
+    elif 'L7-4' == (probe):
+        # --- L7-4 ---
+        param.fc = 5.2e6
+        param.pitch = 2.98e-4
+        param.bandwidth = 57  # Bandwidth is [4, 7] MHz ≈ 57.7%
+        param.Nelements = 128
+        # (Philips) from https://pmc.ncbi.nlm.nih.gov/articles/PMC3413738/
+        param.height = 7e-3
+        param.width = 2.83e-4
+        param.kerf = 2.5e-5
+    elif 'L12-5 50mm' == (probe):
+        # --- L12-5-50mm ---
+        param.fc = 7.8e6
+        param.pitch = 1.953e-4
+        param.bandwidth = 76 # Bandwidth is [5, 11] MHz ≈ 76.9%
+        param.Nelements = 128 # it might be 256
+        # is it from Verasonics? (https://digitalcommons.library.tmc.edu/cgi/viewcontent.cgi?article=1314&context=uthgsbs_docs)
+        # it may be from Philips
+
+
     else:
-        raise Exception(np.array(['The probe ',probe,' is unknown. Should be one of [L11-5V, L12-3V, C5-2V, P4-2V, PA4-2/20, L9-4/38, LA530, L14-5/38, L14-5W/60, P6-3]']))
+        raise ValueError(f"The probe '{probe}' is unknown. Should be one of [L11-5V, L12-3V, C5-2V, P4-2V, PA4-2/20, L9-4/38, LA530, L14-5/38, L14-5W/60, P6-3], L7-4, L12-5 50mm].")
 
     return param
