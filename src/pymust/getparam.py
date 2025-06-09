@@ -173,13 +173,14 @@ def getparam(probe: str) -> utils.Param:
     elif 'L7-4' == (probe):
         # --- L7-4 ---
         param.fc = 5.2e6
-        param.pitch = 2.98e-4
+        # param.pitch = 2.98e-4
         param.bandwidth = 57  # Bandwidth is [4, 7] MHz ≈ 57.7%
         param.Nelements = 128
         # (Philips) from https://pmc.ncbi.nlm.nih.gov/articles/PMC3413738/
         param.height = 7e-3
         param.width = 2.83e-4
         param.kerf = 2.5e-5
+        param.pitch = param.width + param.kerf
     elif 'L12-5 50mm' == (probe):
         # --- L12-5-50mm ---
         param.fc = 7.8e6

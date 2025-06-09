@@ -11,8 +11,8 @@ from .. import pfield as linear_pfield
 
 def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
         param: utils.Param, options: utils.Options = None, * ,
-        lowResources: bool = False, reducedKernel: bool = False,
-        debug: bool = False, DR: int = 30,
+        doublePrecision: bool = False, debug: bool = False,
+        reducedKernel: bool = False, DR: int = 30,
         auxiliary_returns: Iterable[str] = None):
     """
     Initial implementation of the harmonic (non-linear) field.
@@ -29,10 +29,10 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     assert isinstance(reducedKernel, bool), "reducedKernel must be a boolean."
     if reducedKernel:
         assert utils.isnumeric(DR) and DR > 0, "DR must be a positive integer."
-    # Assert that lowResources is a bool
-    assert isinstance(lowResources, bool), "lowResources must be a boolean."
-    # Define complex number type based on lowResources
-    dtype_complex = np.complex64 if lowResources else np.complex128
+    # Assert that doublePrecision is a bool
+    assert isinstance(doublePrecision, bool), "doublePrecision must be a boolean."
+    # Define complex number type based on doublePrecision
+    dtype_complex = np.complex128 if doublePrecision else np.complex64
 
     c = param.c
     lambda_ = param.c / param.fc
@@ -115,7 +115,7 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
         # Apply attenuation
         G *= np.exp(-kwa * D_kernel_effective)
         # Convolve
-        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[xslice,zslice,k], G, mode='same') # DEBUG, check if :,: is correct or if it should be xslice,zslice
+        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[xslice,zslice,k], G, mode='same')
 
         # Multiply by a frequency-dependent factor and scale by grid spacing.
         P1_SPECT[xslice,zslice,k] = (w / 2) ** 2 * dx * dz * P1_conv
