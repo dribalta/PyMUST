@@ -9,7 +9,7 @@ from .methods import interpolate_spectrum
 _EPS = np.finfo(np.float32).eps
 mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
 
-def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_scatterers: np.ndarray, z_scatterers: np.ndarray, interpolator_name: str, freqs: np.ndarray, RC: np.ndarray, param: Param, harmonic: bool = False, debug: bool = False, just_RF_spectrum: bool = False, lowResources: bool = False):
+def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_scatterers: np.ndarray, z_scatterers: np.ndarray, interpolator_name: str, freqs: np.ndarray, IDX: np.ndarray, RC: np.ndarray, param: Param, harmonic: bool = False, debug: bool = False, just_RF_spectrum: bool = False, lowResources: bool = False):
     """
     Simulates RF signals by interpolating a spectral grid onto scatterers.
 
@@ -95,7 +95,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         x_range=x_range,
         z_range=z_range,
         param=param,
-        freqs=freqs
+        freqs=freqs[IDX]
     ).astype(dtype_complex)
 
     if debug: print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}")
@@ -133,7 +133,12 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     if debug: print("Computing spectral response at transducer elements.")
     alpha_dB = param.attenuation
 
+
+    count_freqs_computed = 0
     for i, freq in (enumerate(freqs) if not debug else tqdm.tqdm(enumerate(freqs), total=n_freq, desc="Processing Frequencies")):
+        # If the frequency is not included, ignore it ...
+        if not IDX[i]:
+            continue
         kw = 2 * np.pi * freq / param.c # wavenumber for the current frequency.
         kwa = (alpha_dB / 8.69) * (freq / 1e6) * 1e2 #  attenuation-based wavenumber
 
@@ -148,12 +153,13 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         propagation = EXP * DIR # Shape: (n_scatterers, Nelements)
 
         # Summation and Probe Response
-        received_spectrum = P_reemitted[:, i].reshape(1, -1) @ propagation
+        received_spectrum = P_reemitted[:, count_freqs_computed].reshape(1, -1) @ propagation
         if not harmonic:
             probe_resp = probeFunction(2 * np.pi * freq)
         else:
             probe_resp = probeFunction(2 * np.pi * (freq - param.fc)) # For harmonic, filter around 2 times the fc
         RF_SPECT[i, :] = probe_resp * received_spectrum.flatten()
+        count_freqs_computed += 1
 
     if just_RF_spectrum:
         return None, RF_SPECT

@@ -115,10 +115,10 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
         # Apply attenuation
         G *= np.exp(-kwa * D_kernel_effective)
         # Convolve
-        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[xslice,zslice,k], G, mode='same')
+        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[:,:,k], G[xslice, zslice], mode='same')  #GB: Important, you don't  need to make the P02 smaller, but G!
 
         # Multiply by a frequency-dependent factor and scale by grid spacing.
-        P1_SPECT[xslice,zslice,k] = (w / 2) ** 2 * dx * dz * P1_conv
+        P1_SPECT[:,:,k] = (w / 2) ** 2 * dx * dz * P1_conv # Important, you don't  need to make the P02 smaller, but G!
 
     P1 = np.linalg.norm(P1_SPECT, axis = 2)
 
