@@ -146,14 +146,14 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray,
         P_reemitted = P_reemitted.astype(np.complex64)
         r = r.astype(np.float32)
         alpha_dB = np.float32(alpha_dB)
-    inv_sqrt_r = 1/np.sqrt(r) # same dtype as r
+    sqrt_r = np.sqrt(r) # same dtype as r
 
     for i, freq in (enumerate(freqs[IDX]) if not debug else tqdm.tqdm(enumerate(freqs[IDX]), total=n_freq, desc="Processing Frequencies")):
         kw = np.float32(2 * np.pi * freq / param.c) # wavenumber for the current frequency.
         kwa = (alpha_dB / 8.69) * (freq / 1e6) * 1e2 #  attenuation-based wavenumber
 
         # Compute the Green's function propagation factor:
-        EXP = np.exp(-kwa * r + 1j * kw * r) * inv_sqrt_r
+        EXP = np.exp(-kwa * r + 1j * kw * r) / sqrt_r # Shape: (n_scatterers, Nelements)
         # EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)) * inv_sqrt_r # NOTE np.mod could be too slow
 
         # Directivity
