@@ -7,55 +7,62 @@ from ..utils import Param
 from .methods import interpolate_spectrum
 
 _EPS = np.finfo(np.float32).eps
-mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
+mysinc = lambda x = None: np.sinc(x / np.pi) # [NOTE: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
 
-def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_scatterers: np.ndarray, z_scatterers: np.ndarray, interpolator_name: str, freqs: np.ndarray, RC: np.ndarray, param: Param, harmonic: bool = False, debug: bool = False, just_RF_spectrum: bool = False, lowResources: bool = False):
+def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray,
+          x_scatterers: np.ndarray, z_scatterers: np.ndarray, interpolator_name: str,
+          freqs: np.ndarray, RC: np.ndarray, param: Param, harmonic: bool = False, IDX: np.ndarray = None,
+          debug: bool = False, just_RF_spectrum: bool = False, doublePrecision: bool = False):
     """
-    Simulates RF signals by interpolating a spectral grid onto scatterers.
+    Simulate RF signals by interpolating a spectral grid onto scatterer positions.
 
-    This function takes a pre-computed complex pressure spectrum on a 2D grid,
-    interpolates it to the locations of specified scatterers (given by x_scatterers,
-    z_scatterers) using the chosen method, and then computes the RF signals
-    received by the transducer elements based on the re-emitted waves from these scatterers.
+    This function interpolates a pre-computed complex pressure spectrum (P_SPECT_grid)
+    defined on a 2D (x, z) grid to the positions of specified scatterers, then computes
+    the RF signals received by transducer elements due to the re-emitted waves from these
+    scatterers.
 
     Args:
-        x_range (ndarray): 1D array of unique x-coordinates defining the grid.
-        z_range (ndarray): 1D array of unique z-coordinates defining the grid.
-        P_SPECT_grid (ndarray): 3D array (len(z_range), len(x_range), n_freq)
-                                 of complex spectrum values on the grid.
-        x_scatterers (ndarray): 1D array of x-coordinates for scatterer positions.
-        z_scatterers (ndarray): 1D array of z-coordinates for scatterer positions.
-                                Must have the same length as x_scatterers.
-        interpolator_name (str): Name of the interpolation method registered in
-                                 `methods.py` (e.g., 'linear', 'nearest', 'green').
-        freqs (ndarray): 1D array of frequency values (Hz) corresponding to P_SPECT_grid's
-                         last dimension.
-        RC (ndarray | float | None): Reflection coefficients for scatterers.
-                                     - ndarray: (n_scatterers,) or (n_scatterers, 1) array,
-                                       where n_scatterers = len(x_scatterers).
-                                     - float: Single coefficient applied to all.
-                                     - None: Defaults to 1.0 for all scatterers.
-        param (Param): PyMUST parameter object containing transducer and medium properties.
-                       Requires attributes/methods: c, fc, Nelements, width,
-                       attenuation (dB/cm/MHz), getElementPositions(), getProbeFunction().
-                       May optionally use param.fs for IFFT.
-        harmonic (bool): If True, adjusts the probe function frequency argument,
-                         potentially simulating harmonic reception based on the
-                         definition of getProbeFunction(). Defaults to False.
-        debug (bool): If True, enables debug logging to track progress.
-                      Defaults to False.
-        just_RF_spectrum (bool): If True, skips the inverse FFT step and returns the
-                                 RF spectrum directly. Defaults to False.
-        lowResources (bool): If True, reduces memory usage by switching to complex64 precision.
-                             Defaults to False.
+        x_range (np.ndarray): 1D array of x-coordinates defining the grid.
+        z_range (np.ndarray): 1D array of z-coordinates defining the grid.
+        P_SPECT_grid (np.ndarray): 3D array (len(z_range), len(x_range), n_freq[IDX]) of complex
+            spectrum values on the grid.
+        x_scatterers (np.ndarray): 1D array of x-coordinates for scatterer positions.
+        z_scatterers (np.ndarray): 1D array of z-coordinates for scatterer positions.
+        interpolator_name (str): Name of the interpolation method (e.g., 'linear', 'nearest').
+        freqs (np.ndarray): 1D array of frequency values (Hz) for the "full spectrum" of P_SPECT_grid.
+        RC (np.ndarray | float | None): Reflection coefficients for scatterers. Can be:
+            - ndarray: shape (n_scatterers,) or (n_scatterers, 1)
+            - float: single value for all scatterers
+            - None: defaults to 1.0 for all scatterers
+        param (Param): Parameter object with transducer and medium properties.
+        
+        harmonic (bool, optional): If True, simulates harmonic reception. Default is False.
+        IDX (np.ndarray, optional): Boolean mask for frequency selection. Default is None (all True).
+        debug (bool, optional): If True, prints debug information. Default is False.
+        just_RF_spectrum (bool, optional): If True, returns only the RF spectrum (skips IFFT).
+            Default is False.
+        doublePrecision (bool, optional): If True, uses double precision for calculations.
+            Default is False.
+
     Returns:
-        tuple[ndarray, ndarray]:
-            - RF (ndarray): 2D array (n_time_samples, Nelements) of time-domain RF signals.
-            - RF_SPECT (ndarray): 2D array (n_freq, Nelements) of complex spectrum at
-                                  the transducer elements before IFFT.
+        tuple:
+            RF (np.ndarray or None): Time-domain RF signals (n_time_samples, Nelements),
+                or None if just_RF_spectrum is True.
+            RF_SPECT (np.ndarray): Complex spectrum at the transducer elements
+                (n_freq, Nelements).
     """
-    # Define complex number type based on lowResources
-    dtype_complex = np.complex64 if lowResources else np.complex128
+    assert isinstance(doublePrecision, bool), "doublePrecision must be a boolean."
+    # Define complex number type based on doublePrecision
+    dtype_complex = np.complex128 if doublePrecision else np.complex64
+
+    if IDX is not None:
+        assert isinstance(IDX, np.ndarray), "IDX must be a numpy array."
+        assert IDX.shape == freqs.shape, "IDX must have the same shape as freqs."
+        assert np.sum(IDX) == P_SPECT_grid.shape[2], "IDX must sum to the number of frequency points in P_SPECT_grid."
+    else:
+        IDX = np.ones(freqs.shape, dtype=bool)
+
+    IDX_idx = np.where(IDX)[0]  # Get indices where IDX is True
 
     if debug: print(f"Starting RF simulation from spectral grid using '{interpolator_name}' interpolator.")
 
@@ -95,7 +102,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         x_range=x_range,
         z_range=z_range,
         param=param,
-        freqs=freqs
+        freqs=freqs[IDX]
     ).astype(dtype_complex)
 
     if debug: print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}")
@@ -106,7 +113,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     RF_SPECT = np.zeros((n_freq, param.Nelements), dtype=dtype_complex)
 
     # Re-emitted spectral pressure field at each scatterer location
-    P_reemitted = RC * P_SPECT_scatterers  # Shape: (n_scatterers, n_freq)
+    P_reemitted = RC * P_SPECT_scatterers  # Shape: (n_scatterers, n_freq[IDX])
 
     # --- 3. Compute Geometry and Propagation ---
     if debug: print("Calculating geometry and propagation paths.")
@@ -133,12 +140,21 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     if debug: print("Computing spectral response at transducer elements.")
     alpha_dB = param.attenuation
 
-    for i, freq in (enumerate(freqs) if not debug else tqdm.tqdm(enumerate(freqs), total=n_freq, desc="Processing Frequencies")):
-        kw = 2 * np.pi * freq / param.c # wavenumber for the current frequency.
+    # Precompute and precast variables for performance
+    if not doublePrecision:
+        freqs = freqs.astype(np.float32)
+        P_reemitted = P_reemitted.astype(np.complex64)
+        r = r.astype(np.float32)
+        alpha_dB = np.float32(alpha_dB)
+    inv_sqrt_r = 1/np.sqrt(r) # same dtype as r
+
+    for i, freq in (enumerate(freqs[IDX]) if not debug else tqdm.tqdm(enumerate(freqs[IDX]), total=n_freq, desc="Processing Frequencies")):
+        kw = np.float32(2 * np.pi * freq / param.c) # wavenumber for the current frequency.
         kwa = (alpha_dB / 8.69) * (freq / 1e6) * 1e2 #  attenuation-based wavenumber
 
         # Compute the Green's function propagation factor:
-        EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)).astype(dtype_complex) / np.sqrt(r)
+        EXP = np.exp(-kwa * r + 1j * kw * r) * inv_sqrt_r
+        # EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)) * inv_sqrt_r # NOTE np.mod could be too slow
 
         # Directivity
         DIR_argument = kw * param.width / 2 * sinTh
@@ -153,9 +169,10 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
             probe_resp = probeFunction(2 * np.pi * freq)
         else:
             probe_resp = probeFunction(2 * np.pi * (freq - param.fc)) # For harmonic, filter around 2 times the fc
-        RF_SPECT[i, :] = probe_resp * received_spectrum.flatten()
+        RF_SPECT[IDX_idx[i], :] = probe_resp * received_spectrum.flatten()
 
     if just_RF_spectrum:
+        if debug: print("Returning only the RF spectrum without IFFT.")
         return None, RF_SPECT
 
     # --- 5. Reconstruct Time-Domain RF Signals (Inverse FFT) ---
