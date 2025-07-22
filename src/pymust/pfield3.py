@@ -1,6 +1,9 @@
 import numpy as np
 from . import utils
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 # Ugly optimisation trick, of loop unraveling, as np.mean/np.sum has a large overhead for iterating over few dimesions
 # for i in range(1, 10):
 #   r = '+'.join([f'X[...,{j}]' for j in range(i)])
@@ -25,7 +28,8 @@ def average_over_last_axis(X):
 eps = np.finfo(np.float32).eps
 mysinc = lambda x = None: np.sin(np.abs(x) + eps)/ (np.abs(x) + eps) # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
  
-def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
+def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, 
+            param: utils.Param, isQuick: bool = False, options: utils.Options = None):
     """
     PFIELD3   3-D RMS acoustic pressure field of a planar 2-D array
     RP = PFIELD3(X,Y,Z,DELAYS,PARAM) returns the three-dimensional
@@ -222,6 +226,8 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
             isQuick = False
         else:
             options = utils.Options()
+            options.ElementSplitting = [1,1]
+
 
     if isQuick:
         options.dBThresh = -20
@@ -422,6 +428,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         return [], [], []
     #-----
 
+    logging.debug('PFIELD3: Start computing distances...')
 
     #%------------------------------------%
     #% POINT LOCATIONS, DISTANCES & GRIDS %
@@ -525,8 +532,13 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         param.df = df
 
     #-- FREQUENCY SAMPLES
-    Nf = int(2*np.ceil(param.fc/df)+1) # number of frequency samples
-    f = np.linspace(0,2*param.fc,Nf) # frequency samples
+    if options.f is not None:
+        f = options.f.copy()
+        Nf = len(f) # number of frequency samples
+    else:
+        Nf = int(2*np.ceil(param.fc/df)+1) # number of frequency samples
+        f = np.linspace(0,2*param.fc,Nf) # frequency samples
+    param.f = f.copy()
     df = f[1]  # update the frequency step
     #-- we keep the significant components only by using options.dBThresh
     S = np.abs(pulseSpectrum(2*np.pi*f)*probeSpectrum(2*np.pi*f))
@@ -621,9 +633,9 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     EXP = EXP.astype(np.complex64)
 
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
-
+    logging.debug('PFIELD3: Summation over the frequency spectrum...')
     for k in range(nSampling):
-
+        logging.debug(f'PFIELD3: Processing frequency bin {k}/{nSampling}')
         kw = 2*np.pi*f[k]/c # wavenumber
 
         #-- Exponential array of size [numel(x) NumberOfElements MxN]

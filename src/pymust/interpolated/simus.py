@@ -87,16 +87,32 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
     # --- 1. Interpolate the grid spectrum at the scatterer positions ---
     if debug: print("Calling interpolation dispatcher.")
 
-    P_SPECT_scatterers = interpolate_spectrum(
-        interpolator_name=interpolator_name,
-        grid_values=P_SPECT_grid, # Pass the 3D grid
-        x_scatterers=x_scatterers,
-        z_scatterers=z_scatterers,
-        x_range=x_range,
-        z_range=z_range,
-        param=param,
-        freqs=freqs[IDX]
-    ).astype(dtype_complex)
+    if True:
+        # New version with interpolation dispatcher
+        P_SPECT_scatterers = interpolate_spectrum(
+            interpolator_name='linear',
+            grid_values=P_SPECT_grid,  # Pass the 3D grid
+            x_scatterers=x_scatterers,
+            z_scatterers=z_scatterers,
+            x_range=x_range,
+            z_range=z_range,
+            param=param,
+            freqs=freqs[IDX],
+            lowResources=lowResources
+        )
+    else:
+        #Old version
+        P_SPECT_scatterers = interpolate_spectrum(
+            interpolator_name=interpolator_name,
+            grid_values=P_SPECT_grid, # Pass the 3D grid
+            x_scatterers=x_scatterers,
+            z_scatterers=z_scatterers,
+            x_range=x_range,
+            z_range=z_range,
+            param=param,
+            freqs=freqs[IDX]
+        )
+    P_SPECT_scatterers = P_SPECT_scatterers.astype(dtype_complex)
 
     if debug: print(f"Interpolation complete. Interpolated spectrum shape: {P_SPECT_scatterers.shape}")
 
