@@ -24,6 +24,10 @@ dependencies = [
 ]
 dynamic = ["license", "version"]
 
+[project.optional-dependencies]
+pytorch = ["torch"]
+accelerated = ["torch", "pyfftw"]
+
 [project.urls]
 Homepage = "https://www.biomecardio.com/MUST"
 Repository = "https://github.com/creatis-ULTIM/PyMUST"

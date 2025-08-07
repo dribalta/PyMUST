@@ -1,8 +1,9 @@
-import numpy as np, scipy, scipy.signal, logging
+import scipy, scipy.signal, logging
+from .backend import get_backend
 from . import utils
 from typing import Union
 
-def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: float = None) -> np.ndarray:
+def rf2iq(RF, Fs: Union[float, utils.Param], Fc: float = None, B: float = None):
     """
     %RF2IQ   I/Q demodulation of RF data
     %   IQ = RF2IQ(RF,Fs,Fc) demodulates the radiofrequency (RF) bandpass
@@ -120,8 +121,9 @@ def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: fl
     """
 
     #%-- Check input arguments
-    assert np.issubdtype(RF.dtype, np.floating),'RF must contain real RF signals.'
-    t0 = 0; #% default value for time offset
+    backend = get_backend()
+    assert backend.issubdtype(RF.dtype, backend.floating),'RF must contain real RF signals.'
+    t0 = 0  # default value for time offset
     if isinstance(Fs, utils.Param):
         param = Fs
         param.ignoreCaseInFieldNames()
@@ -129,20 +131,20 @@ def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: fl
         Fs = param.fs
         B = param.get('bandwidth', None)
         Fc = param.get('fc', None)
-        t0 = param.get('t0', np.zeros((1)))
+        t0 = param.get('t0', backend.zeros((1)))
 
 
-    assert np.isscalar(Fs), 'The sampling frequency (Fs or PARAM.fs) must be a scalar.'
-    assert Fc is None or np.isscalar(Fc), 'The center frequency (Fc or PARAM.fc) must be None or a scalar.'
+    assert backend.isscalar(Fs), 'The sampling frequency (Fs or PARAM.fs) must be a scalar.'
+    assert Fc is None or backend.isscalar(Fc), 'The center frequency (Fc or PARAM.fc) must be None or a scalar.'
 
     #%-- Convert to column vector (if RF is a row vector)
 
     #%-- Time vector
     nl = RF.shape[0]
-    t = np.arange(nl)/Fs
+    t = backend.arange(nl)/Fs
     if isinstance(t0, float):
-        t0 = np.ones((1))*t0 
-    assert utils.isnumeric(t0) and np.isscalar(t0) or isinstance(t0, np.ndarray) and (len(t0)==1 or len(t0)==nl), 'PARAM.t0 must be a numeric scalar or vector of size = size(RF,1).'
+        t0 = backend.ones((1))*t0 
+    assert utils.isnumeric(t0) and backend.isscalar(t0) or hasattr(t0, 'shape') and (len(t0)==1 or len(t0)==nl), 'PARAM.t0 must be a numeric scalar or vector of size = size(RF,1).'
     t = t+t0
 
     #%-- Seek the carrier frequency (if required)
@@ -150,20 +152,20 @@ def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: fl
         #% Keep a maximum of 100 randomly selected scanlines
         Nc = RF.shape[1]
         if Nc<100:
-             idx = np.arange(Nc)
+             idx = backend.arange(Nc)
         else:
-            idx = np.random.permutation(Nc)[:100]
+            idx = backend.random_permutation(Nc)[:100]
         #% Power Spectrum
-        P = np.linalg.norm(np.fft.rfft(RF[:,idx], axis = 0),axis =1)
-        freqs = np.fft.rfftfreq(RF.shape[0],1/Fs)
+        P = backend.norm(backend.fft_rfft(RF[:,idx], axis = 0),axis =1)
+        freqs = backend.fft_rfftfreq(RF.shape[0],1/Fs)
         #% Carrier frequency
-        Fc = np.sum(freqs*P)/np.sum(P)
+        Fc = backend.sum(freqs*P)/backend.sum(P)
     
     #%-- Normalized cut-off frequency
     if B is None:
         Wn = min(2*Fc/Fs,0.5)
     else:
-        assert np.isscalar(B), 'The signal bandwidth (B or PARAM.bandwidth) must be a scalar.'
+        assert backend.isscalar(B), 'The signal bandwidth (B or PARAM.bandwidth) must be a scalar.'
         assert B>0 and B<200, 'The signal bandwidth (B or PARAM.bandwidth, in %) must be within the interval of ]0,200[.'
         B = Fc*B/100 #; % bandwidth in Hz
         Wn = B/Fs
@@ -171,14 +173,14 @@ def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: fl
     assert Wn>0 and Wn<=1,'The normalized cutoff frequency is not within the interval of (0,1). Check the input parameters!'
 
     #%-- Down-mixing of the RF signals
-    exponential = np.exp(-1j*2*np.pi*Fc*t)
-    exponential = exponential.reshape( [-1] + [1 for _ in range(RF.ndim-1)])
-    IQ =exponential*RF
+    exponential = backend.exp(-1j*2*backend.pi*Fc*t)
+    exponential = backend.reshape(exponential, [-1] + [1 for _ in range(RF.ndim-1)])
+    IQ = exponential*RF
 
 
-   # %-- Low-pass filter
+    # %-- Low-pass filter
     b,a = scipy.signal.butter(5,Wn)
-    IQ = scipy.signal.filtfilt(b,a,IQ, axis = 0)*2; #% factor 2: to preserve the envelope amplitude
+    IQ = scipy.signal.filtfilt(b,a,IQ, axis = 0)*2  # factor 2: to preserve the envelope amplitude
 
     #%-- Recover the initial size (if was a vector row)
     #if wasrow:
@@ -187,8 +189,8 @@ def rf2iq(RF: np.ndarray, Fs: Union[float, utils.Param], Fc: float = None, B: fl
     #%-- Display a warning message if harmful aliasing is suspected
     if B is not None and Fs<(2*Fc+B): #% the RF signal is undersampled
         fL = Fc-B/2; fH = Fc+B/2; #% lower and higher frequencies of the bandpass signal
-        n = int(np.floor(fH/(fH-fL)))
-        harmlessAliasing = np.any(np.logical_and(2*fH/np.arange(1,n+1) <=Fs,  Fs<=2*fL/(np.arange(n) +1e-10)))
+        n = int(backend.floor(fH/(fH-fL)))
+        harmlessAliasing = backend.any(backend.logical_and(2*fH/backend.arange(1,n+1) <=Fs,  Fs<=2*fL/(backend.arange(n) +1e-10)))
         if not harmlessAliasing:
             logging.warning('RF2IQ:harmfulAliasing: Harmful aliasing is present: the aliases are not mutually exclusive!')
     return IQ

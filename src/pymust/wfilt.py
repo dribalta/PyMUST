@@ -1,7 +1,8 @@
-import numpy as np,scipy, logging
+import scipy, logging
 import typing
+from .backend import get_backend
 
-def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
+def wfilt(SIG, method: str, n: int):
     """
     %WFILT   Wall filtering (or clutter filtering)
     %   fSIG = WFILT(SIG,METHOD,N) high-pass (wall) filters the RF or I/Q
@@ -47,12 +48,12 @@ def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
     logging.warning('NOTE GB: this code has not been tested!')
 
     #%-- Check the input arguments
-
-    assert SIG.ndims ==3 and SIG.shape[2] >= 2,'SIG must be a 3-D array with SIG.shape[2]>=2';
+    backend = get_backend()
+    assert len(SIG.shape) ==3 and SIG.shape[2] >= 2,'SIG must be a 3-D array with SIG.shape[2]>=2'
     assert isinstance(n, int) and n >= 0, 'N must be a nonnegative integer.'
 
     siz0 = SIG.shape
-    N = siz0[2]; # number of slow-time samples
+    N = siz0[2]  # number of slow-time samples
     method = method.lower()
 
     if method == 'poly':
@@ -64,13 +65,13 @@ def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
         
         # If the degree is 0, the mean is removed.
         if n==0:
-            return  SIG-np.mean(SIG,2);
+            return  SIG-backend.mean(SIG,2)
     
         # GB TODO: use Legendre Matrix instead (more numerically stable and efficient)
-        V = np.vander(np.linspace(0,1,N), n+1) # Vandermonde matrix
-        A = np.eye(N) - V @ np.linalg.pinv(V) # Projection matrix
+        V = backend.vander(backend.linspace(0,1,N), n+1)  # Vandermonde matrix
+        A = backend.eye(N) - V @ backend.linalg_pinv(V)  # Projection matrix
         # Multiply along the slow-time dimension
-        SIG = np.einsum('ij,nkj->nki', A, SIG)
+        SIG = backend.einsum('ij,nkj->nki', A, SIG)
        
 
     elif method == 'dct':
@@ -81,14 +82,14 @@ def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
         assert n>0, 'N must be >0 with the "dct" method.'
         assert N>=n,'The packet length must be >=N.'
         
-        #% If the degree is 0, the mean is removed.
+        # If the degree is 0, the mean is removed.
         if n==1:
-            return SIG-np.mean(SIG,2);
+            return SIG-backend.mean(SIG,2)
         
-        D = scipy.fft.dct(np.eye(N), norm='ortho', axis=0)[n:, :] #DCT matrix, only high frequencies
-        D= D.T@D # Create the projection matrix
-        #Multiply along the slow-time dimension
-        SIG = np.einsum('ij,nkj->nki', D, SIG)        
+        D = scipy.fft.dct(backend.eye(N), norm='ortho', axis=0)[n:, :]  # DCT matrix, only high frequencies
+        D= D.T@D  # Create the projection matrix
+        # Multiply along the slow-time dimension
+        SIG = backend.einsum('ij,nkj->nki', D, SIG)        
         
     elif method == 'svd':
         #% ----------------------------------------
@@ -98,12 +99,12 @@ def wfilt(SIG: np.ndarray, method: str, n: int) -> np.ndarray:
         assert n>0,'N must be >0 with the "svd" method.'
         assert N>=n,'The packet length must be >=N.'
         
-        #% Each column represents a column-rearranged frame.
-        SIG = SIG.reshape((-1, siz0[2])) 
+        # Each column represents a column-rearranged frame.
+        SIG = backend.reshape(SIG, (-1, siz0[2])) 
 
         U,S,V = scipy.svd(SIG,full_matrices = False); # SVD decomposition
         SIG = U[:,n:N] @ S[n:N,n:N] @V[:,n:N].T; # high-pass filtering
-        SIG = SIG.reshape(siz0)        
+        SIG = backend.reshape(SIG, siz0)        
     else:
         raise ValueError('METHOD must be "poly", "dct", or "svd".')
 

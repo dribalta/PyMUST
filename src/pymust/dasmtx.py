@@ -1,11 +1,10 @@
-import numpy as np
 import scipy.optimize, itertools 
-
 import scipy, scipy.interpolate
+from .backend import get_backend
 from . import  utils
 
 
-def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sparse.spmatrix:
+def dasmtx(SIG, x, z, *varargin):
     """
     %DASMTX   Delay-and-sum matrix
     %   M = DASMTX(SIG,X,Z,DELAYS,PARAM) returns the numel(X)-by-numel(SIG)
@@ -188,14 +187,15 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
     #% CHECK THE INPUT SYNTAX %
     #%------------------------%
 
+    backend = get_backend()
     NArg = len(varargin) 
     assert NArg>0,'Not enough input arguments.'
     assert NArg<4,'Too many input arguments.'
     #% assert(nargout<3,'Too many output arguments.')
 
     assert x.shape == z.shape,'X and Z must of same size.'
-    if  np.prod(SIG.shape) in [2, 3]:
-        SIG = SIG.flatten()
+    if  backend.prod(SIG.shape) in [2, 3]:
+        SIG = backend.flatten(SIG)
         nl = int(abs(SIG[0]))
         nc = int(abs(SIG[1]))
     else:
@@ -231,7 +231,7 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         param.ignoreCaseInFieldNames()
 
         if utils.isfield(param,'TXdelay'): #% DASMTX(SIG,x,z,delaysTX,param)
-            assert np.allclose(delaysTX.flatten(), param.TXdelay.flatten()),'If both specified, PARAM.TXdelay and DELAYS must be equal.'
+            assert backend.allclose(backend.flatten(delaysTX), backend.flatten(param.TXdelay)),'If both specified, PARAM.TXdelay and DELAYS must be equal.'
 
 
 
@@ -257,13 +257,13 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         # The f-number will be determined automatically
         pass
     else:
-        assert np.isscalar(param.fnumber) and utils.isnumeric(param.fnumber), 'If not empty, PARAM.fnumber must be a scalar.'
+        assert backend.isscalar(param.fnumber) and utils.isnumeric(param.fnumber), 'If not empty, PARAM.fnumber must be a scalar.'
         assert param.fnumber>=0, 'PARAM.fnumber must be non-negative.'
 
 
     #%-- Acquisition start time (in s)
     if not utils.isfield(param,'t0'):
-        param.t0 = np.zeros((1,1)) #% acquisition start time in s
+        param.t0 = backend.zeros((1,1))  # acquisition start time in s
 
 
     #%-- Pitch & width or kerf (in m)
@@ -296,10 +296,10 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
     #%-- Radius of curvature (in m)
     #% for a convex array
     if not utils.isfield(param,'radius'):
-        param.radius = np.inf #% default = linear array
+        param.radius = backend.inf  # default = linear array
 
     RadiusOfCurvature = param.radius
-    isLINEAR = np.isinf(RadiusOfCurvature)
+    isLINEAR = backend.isinf(RadiusOfCurvature)
 
     #%-- Reception angle (in rad) -- [Advanced option for vector Doppler] --
     if not utils.isfield(param,'RXangle') or param.RXangle==0:
@@ -307,14 +307,14 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         param.RXangle = 0
     else:
         #%- this option is not available for convex arrays
-        assert np.isinf(RadiusOfCurvature), 'PARAM.RXangle must be 0 with a convex array.'
+        assert backend.isinf(RadiusOfCurvature), 'PARAM.RXangle must be 0 with a convex array.'
         #%-
         isRXangle = True
-        cosRX = np.cos(param.RXangle)
-        tanRX = np.tan(param.RXangle)
-        if np.isscalar(param.RXangle):
-            cosRX = cosRX*np.ones(x.shape)
-            tanRX = tanRX*np.ones(x.shape)
+        cosRX = backend.cos(param.RXangle)
+        tanRX = backend.tan(param.RXangle)
+        if backend.isscalar(param.RXangle):
+            cosRX = cosRX*backend.ones(x.shape)
+            tanRX = tanRX*backend.ones(x.shape)
 
 
     # NoteGB: Temporary, while checking the code of virtual sources in the DAS matrix
@@ -332,7 +332,7 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
 
 
     #%-- Number of elements
-    assert isinstance(delaysTX,np.ndarray), 'delaysTX must be a numpy array.'
+    assert hasattr(delaysTX, 'shape'), 'delaysTX must be an array.'
     if len(delaysTX.shape) == 1:
         delaysTX = delaysTX.reshape((1, -1))
     if delaysTX.shape[0] == nc and delaysTX.shape[1] != nc:
@@ -360,7 +360,7 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         else:
             #% param.elements is a vector
             xe = param.elements.reshape((1,-1))
-            ze = np.zeros_like(xe)
+            ze = backend.zeros_like(xe)
 
         isPARAMelements = True
     else:
@@ -379,7 +379,7 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         else:
             raise ValueError('A center frequency (PARAM.fc) is required with I/Q data.')
         
-        wc = 2*np.pi*param.fc
+        wc = 2*backend.pi*param.fc
 
 
 
@@ -401,23 +401,23 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
 
 
     #% Interpolations of the TX delays for a better estimation of dTX
-    idx = np.logical_not(np.isnan(delaysTX))
-    assert np.sum(np.abs(np.diff(idx)))<3, 'Several simultaneous sub-apertures are not allowed.'
+    idx = backend.logical_not(backend.isnan(delaysTX))
+    assert backend.sum(backend.abs(backend.diff(idx)))<3, 'Several simultaneous sub-apertures are not allowed.'
 
     if not param.passive:
-        nTX = np.count_nonzero(idx)#; % number of transmitting elements
+        nTX = backend.count_nonzero(idx)  # number of transmitting elements
         if nTX>1:
-            idxi = np.linspace(0,nTX -1,4*nTX)
+            idxi = backend.linspace(0,nTX -1,4*nTX)
             xTi = utils.interp1(xe[idx], idxi, kind = 'cubic')
             if isLINEAR:
-                zTi = np.zeros_like(xTi)
+                zTi = backend.zeros_like(xTi)
             else:
                 zTi = utils.interp1(ze[idx], idxi,'spline')
             delaysTXi = utils.interp1(delaysTX[idx],idxi,'spline')
         else:
             xTi = xe[idx]
             if isLINEAR:
-                zTi =np.zeros_like(idx)
+                zTi = backend.zeros_like(idx)
             else: 
                 zTi = ze[idx]
             delaysTXi = delaysTX[idx]
@@ -430,11 +430,11 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
         lambdaMIN = c/(param.fc*(1+param.bandwidth/200))
         RXa = abs(param.RXangle)
         #% Note: in Matlab, sinc(x) = sin(pi*x)/(pi*x)
-        f = lambda th,width= ElementWidth,l= lambdaMIN: np.abs(np.cos(th+RXa)*np.sinc(width/l*np.sin(th+RXa))-0.71)
+        f = lambda th,width= ElementWidth,l= lambdaMIN: backend.abs(backend.cos(th+RXa)*backend.sinc(width/l*backend.sin(th+RXa))-0.71)
 
-        xx = scipy.optimize.fminbound(f,0,np.pi/2-RXa,xtol= np.pi/100)
+        xx = scipy.optimize.fminbound(f,0,backend.pi/2-RXa,xtol= backend.pi/100)
         alpha = xx
-        param.fnumber = 1/2/np.tan(alpha)
+        param.fnumber = 1/2/backend.tan(alpha)
 
     fNum = param.fnumber
 
@@ -452,24 +452,24 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
     #% dTX(k) = min(delaysTXi*c + sqrt((xTi-x(k)).^2 + (zTi-z(k)).^2));
     #% In a compact matrix form, this yields:
     if param.passive:
-        dTX = np.zeros_like(x)
+        dTX = backend.zeros_like(x)
     elif not useVirtualSource:
         # OLD version of computing the transmission delays
         #% For a given location [x(k),z(k)], one has:
         #% dTX(k) = min(delaysTXi*c + sqrt((xTi-x(k)).^2 + (zTi-z(k)).^2));
         #% In a compact matrix form, this yields:
-        dTX = np.min(delaysTXi*c + np.sqrt((xTi-x)**2 + (zTi-z)**2), 1).reshape((-1,1))
+        dTX = backend.min(delaysTXi*c + backend.sqrt((xTi-x)**2 + (zTi-z)**2), 1).reshape((-1,1))
 
     else:
-        WasTransmitting = np.logical_not(np.isnan(delaysTX))
-        assert np.sum(np.abs(np.diff(WasTransmitting)))<3, 'Multiple transmitting sub-apertures are not allowed during beamforming.'
-        nTX = np.count_nonzero(WasTransmitting); # number of transmitting elements
+        WasTransmitting = backend.logical_not(backend.isnan(delaysTX))
+        assert backend.sum(backend.abs(backend.diff(WasTransmitting)))<3, 'Multiple transmitting sub-apertures are not allowed during beamforming.'
+        nTX = backend.count_nonzero(WasTransmitting)  # number of transmitting elements
 
 
         #-- TX distances
         if nTX==1:
             # Only one element was active
-            dTX = np.hypot(xe[WasTransmitting][0]-x,ze[WasTransmitting][0]-z) + delaysTX[WasTransmitting][0]*c
+            dTX = backend.hypot(xe[WasTransmitting][0]-x,ze[WasTransmitting][0]-z) + delaysTX[WasTransmitting][0]*c
 
         elif nTX<3:
             raise ValueError('If not 1, the number of neighboring transmitting elements must be at least 3.')
@@ -481,14 +481,14 @@ def dasmtx(SIG: np.ndarray, x: np.ndarray, z: np.ndarray, *varargin) -> scipy.sp
 
             # Distances between the (x,z) points and the lines normal to the
             # virtual transducer at (xv,zv)
-            Dn = np.abs(x-xv + dzv*(z-zv))/np.hypot(1,dzv);
+            Dn = backend.abs(x-xv + dzv*(z-zv))/backend.hypot(1,dzv)
             # idx contains the element numbers that give the smallest Dn_s
-            idx = np.argmin(Dn,1)
+            idx = backend.argmin(Dn,1)
             
             InterpMethod = 'nearest';
 
             if InterpMethod == 'nearest':
-                dTX = np.hypot(xv[idx].reshape((-1,1)) - x, zv[idx].reshape((-1,1))  -z)
+                dTX = backend.hypot(backend.reshape(xv[idx], (-1,1)) - x, backend.reshape(zv[idx], (-1,1)) - z)
             elif InterpMethod == 'parabolic':
                 N = x.size
                 dTX = np.hypot(xv.reshape((1,-1))-x,zv.reshape((1,-1))-z);

@@ -1,9 +1,9 @@
 from . import utils, pfield, getpulse
 import logging, copy, multiprocessing, functools
-import numpy as np 
+from .backend import get_backend 
 
 # pfield wrapper so it is compatible with multiprocessing. Needs to be defined in a global scope
-def pfieldParallel(x: np.ndarray, y: np.ndarray, z: np.ndarray, RC: np.ndarray, delaysTX: np.ndarray, param: utils.Param, options: utils.Options):
+def pfieldParallel(x, y, z, RC, delaysTX, param: utils.Param, options: utils.Options):
     options = options.copy()
     options.ParPool = False # No parallel within the parallel
     options.RC = RC
@@ -215,6 +215,7 @@ def simus(*varargin):
     %   href="matlab:web('https://www.biomecardio.com')">www.BiomeCardio.com</a>
     """
 
+    backend = get_backend()
     returnTime = False #NoteGB: Set to True if you want to return the time, but quite a mess right now with the matlab style arguments
 
     nargin = len(varargin)
@@ -263,7 +264,7 @@ def simus(*varargin):
         assert x.shape == z.shape and x.shape == RC.shape and y.shape == x.shape,  'X, Y, Z, and RC must be of same size.'
 
     if len(x.shape) ==0:
-         return np.array([]), np.array([])
+         return backend.array([]), backend.array([])
 
 
     #%------------------------%
@@ -308,9 +309,9 @@ def simus(*varargin):
 
     #%-- Receive delays (in s)
     if not utils.isfield(param,'RXdelay'):
-        param.RXdelay = np.zeros((1,NumberOfElements), dtype = np.float32)
+        param.RXdelay = backend.zeros((1,NumberOfElements), dtype=backend.float32)
     else:
-        assert  isinstance(param.RXdelay, np.ndarray) and utils.isnumeric(param.RXdelay), 'PARAM.RXdelay must be a vector'
+        assert  isinstance(param.RXdelay, backend.ndarray) and utils.isnumeric(param.RXdelay), 'PARAM.RXdelay must be a vector'
         assert param.RXdelay.shape[1] ==NumberOfElements, 'PARAM.RXdelay must be of length = (number of elements)'
         param.RXdelay = param.RXdelay.reshape((1,NumberOfElements))
 
@@ -318,7 +319,7 @@ def simus(*varargin):
     if not utils.isfield(options,'dBThresh'):
         options.dBThresh = -100; # % default is -100dB in SIMUS
 
-    assert np.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<0,'OPTIONS.dBThresh must be a negative scalar.'
+    assert backend.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<0,'OPTIONS.dBThresh must be a negative scalar.'
 
     #%-- Frequency step (scaling factor)
     #% The frequency step is determined automatically. It is tuned to avoid
@@ -328,7 +329,7 @@ def simus(*varargin):
     if not utils.isfield(options,'FrequencyStep'):
         options.FrequencyStep = 1
 
-    assert np.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and  options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
+    assert backend.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and  options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
     
     if options.FrequencyStep>1:
        logging.warning('MUST:FrequencyStep', 'OPTIONS.FrequencyStep is >1: aliasing may be present!')
@@ -348,18 +349,18 @@ def simus(*varargin):
 
     #%-- Maximum distance
     d2 = (x.reshape((-1,1))-xe)**2+(z.reshape((-1,1))-ze)**2
-    maxD = np.sqrt(np.max(d2)) #% maximum element-scatterer distance
+    maxD = backend.sqrt(backend.max(d2)) #% maximum element-scatterer distance
     _, tp = getpulse.getpulse(param, 2)
     maxD = maxD + tp[-1] * param.c #add pulse length
 
     #%-- FREQUENCY SAMPLES
-    valid_tx_delays = np.array([e for e in delaysTX.flatten() if not np.isnan(e)])
-    df = 1/2/(2*maxD/param.c + np.max(np.concat((valid_tx_delays,param.RXdelay.flatten())))) # % to avoid aliasing in the time domain
-    # df = 1/2/(2*maxD/param.c + np.max(delaysTX.flatten() + param.RXdelay.flatten())) # % to avoid aliasing in the time domain
+    valid_tx_delays = backend.array([e for e in delaysTX.flatten() if not backend.isnan(e)])
+    df = 1/2/(2*maxD/param.c + backend.max(backend.concatenate((valid_tx_delays,param.RXdelay.flatten())))) # % to avoid aliasing in the time domain
+    # df = 1/2/(2*maxD/param.c + backend.max(delaysTX.flatten() + param.RXdelay.flatten())) # % to avoid aliasing in the time domain
     df = df*options.FrequencyStep
-    Nf = 2*int(np.ceil(param.fc/df))+1 # % number of frequency samples
+    Nf = 2*int(backend.ceil(param.fc/df))+1 # % number of frequency samples
     #%-- Run PFIELD to calculate the RF spectra
-    RFspectrum = np.zeros((Nf,NumberOfElements), dtype = np.complex64)# % will contain the RF spectra
+    RFspectrum = backend.zeros((Nf,NumberOfElements), dtype=backend.complex64)# % will contain the RF spectra
     options.FrequencyStep = df
 
     #%- run PFIELD in a parallel pool (NW workers)
@@ -386,17 +387,17 @@ def simus(*varargin):
         RFspectrum[idx,:]  = RFsp
 
     #%-- RF signals (in the time domain)
-    nf = int(np.ceil(param.fs/2/param.fc*(Nf-1)))
-    RF = np.fft.irfft(np.conj(RFspectrum),nf, axis = 0)
+    nf = int(backend.ceil(param.fs/2/param.fc*(Nf-1)))
+    RF = backend.fft.irfft(backend.conj(RFspectrum),nf, axis = 0)
     RF = RF[:(nf + 1)//2] #*param.fs/4/param.fc
 
     #%-- Zeroing the very small values
     RelThresh = 1e-5#; % -100 dB
-    tmp2= lambda RelRF: 0.5*(1+np.tanh((RelRF-RelThresh)/(RelThresh/10)))
-    tmp = lambda RelRF: np.round(tmp2(RelRF)/(RelThresh/10))*(RelThresh/10)
-    RF = RF*tmp(np.abs(RF)/np.max(np.abs(RF)))
+    tmp2= lambda RelRF: 0.5*(1+backend.tanh((RelRF-RelThresh)/(RelThresh/10)))
+    tmp = lambda RelRF: backend.round(tmp2(RelRF)/(RelThresh/10))*(RelThresh/10)
+    RF = RF*tmp(backend.abs(RF)/backend.max(backend.abs(RF)))
     if returnTime: 
-        return RF,RFspectrum, np.arange(RF.shape[0])/param.fs
+        return RF,RFspectrum, backend.arange(RF.shape[0])/param.fs
     else:
          return RF,RFspectrum
 

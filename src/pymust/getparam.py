@@ -1,5 +1,5 @@
-import numpy as np
 from . import utils
+from .backend import get_backend
 
 
 def getparam(probe: str) -> utils.Param:
@@ -86,7 +86,8 @@ def getparam(probe: str) -> utils.Param:
         param.pitch = 0.0003
         param.Nelements = 128
         param.bandwidth = 77
-        param.radius = np.inf
+        backend = get_backend()
+        param.radius = backend.inf
         param.height = 0.005
         param.focus = 0.018
     elif 'L12-3V' == probe:
@@ -97,7 +98,8 @@ def getparam(probe: str) -> utils.Param:
         param.pitch = 0.0002
         param.Nelements = 192
         param.bandwidth = 93
-        param.radius = np.inf
+        backend = get_backend()
+        param.radius = backend.inf
         param.height = 0.005
         param.focus = 0.02
     elif 'C5-2V' == probe:
@@ -119,7 +121,8 @@ def getparam(probe: str) -> utils.Param:
         param.pitch = 0.0003
         param.Nelements = 64
         param.bandwidth = 74
-        param.radius = np.inf
+        backend = get_backend()
+        param.radius = backend.inf
         param.height = 0.014
         param.focus = 0.06
         #--- From the OLD version of GETPARAM: ---#
@@ -171,6 +174,6 @@ def getparam(probe: str) -> utils.Param:
         param.Nelements = 64
         param.bandwidth = 2 / 3 * 100
     else:
-        raise Exception(np.array(['The probe ',probe,' is unknown. Should be one of [L11-5V, L12-3V, C5-2V, P4-2V, PA4-2/20, L9-4/38, LA530, L14-5/38, L14-5W/60, P6-3]']))
+        raise Exception(f'The probe {probe} is unknown. Should be one of [L11-5V, L12-3V, C5-2V, P4-2V, PA4-2/20, L9-4/38, LA530, L14-5/38, L14-5W/60, P6-3]')
 
     return param

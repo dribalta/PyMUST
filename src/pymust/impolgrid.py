@@ -1,6 +1,7 @@
-import numpy as np, logging, typing
+import logging, typing
+from .backend import get_backend
 from . import utils
-def impolgrid(siz: typing.Union[int, np.ndarray, list], zmax: float, width: float, param: utils.Param = None):
+def impolgrid(siz: typing.Union[int, list], zmax: float, width: float, param: utils.Param = None):
     """
     %IMPOLGRID   Polar-type grid for ultrasound images
     %   IMPOLGRID returns a polar-type (fan-type) grid expressed in Cartesian
@@ -80,13 +81,14 @@ def impolgrid(siz: typing.Union[int, np.ndarray, list], zmax: float, width: floa
         noWidth = True
 
 
+    backend = get_backend()
     assert isinstance(siz, int) or len(siz)==1 or len(siz)==2,'SIZ must be [M,N] or M.'
     if isinstance(siz, int):
-        siz = np.array([siz, siz])
+        siz = backend.array([siz, siz])
 
-    assert np.all(siz>0) and np.issubdtype(siz.dtype, np.integer), 'SIZ components must be positive integers.'
+    assert backend.all(siz>0) and backend.issubdtype(siz.dtype, backend.integer), 'SIZ components must be positive integers.'
 
-    assert np.isscalar(zmax) and zmax>0, 'ZMAX must be a positive scalar.'
+    assert backend.isscalar(zmax) and zmax>0, 'ZMAX must be a positive scalar.'
 
     assert isinstance(param, utils.Param),'PARAM must be a structure.'
 
@@ -105,10 +107,10 @@ def impolgrid(siz: typing.Union[int, np.ndarray, list], zmax: float, width: floa
     #%-- Radius of curvature (in m)
     #% for a convex array
     if not utils.isfield(param,'radius'):
-        param.radius = np.inf #% default = linear array
+        param.radius = backend.inf  # default = linear array
 
     R = param.radius
-    isLINEAR = np.isinf(R)
+    isLINEAR = backend.isinf(R)
 
     if not isLINEAR and not noWidth:
         logging.warning('MUST:impolgrid', 'The parameter WIDTH is ignored with a convex array.')
@@ -116,31 +118,32 @@ def impolgrid(siz: typing.Union[int, np.ndarray, list], zmax: float, width: floa
     #%-- Origo (x0,z0)
     #% x0 = 0;
     if isLINEAR:
-        L = (N-1)*p# % array width
-        #% z0 = -L/2*(1+cos(width))/sin(width); % (old version)
+        L = (N-1)*p  # array width
+        # z0 = -L/2*(1+cos(width))/sin(width); % (old version)
         z0 = 0
     else:
-        L = 2*R*np.sin(np.arcsin(p/2/R)*(N-1)) # % chord length
-        d = np.sqrt(R**2-L**2/4) # % apothem
-        #% https://en.wikipedia.org/wiki/Circular_segment
+        L = 2*R*backend.sin(backend.arcsin(p/2/R)*(N-1))  # chord length
+        d = backend.sqrt(R**2-L**2/4)  # apothem
+        # https://en.wikipedia.org/wiki/Circular_segment
         z0 = -d
 
 
-    #%-- Image polar grid
+    #-- Image polar grid
     if isLINEAR:
-        R = np.hypot(L/2,z0)
-        th,r = np.meshgrid( 
-            np.linspace(width/2,-width/2,siz[1])+np.pi/2,
-            np.linspace(R+p,-z0+zmax,siz[0]))
+        R = backend.hypot(L/2,z0)
+        th,r = backend.meshgrid( 
+            backend.linspace(width/2,-width/2,siz[1])+backend.pi/2,
+            backend.linspace(R+p,-z0+zmax,siz[0]))
         x,z = pol2cart(th,r)
     else:
-        th,r = np.meshgrid(
-            np.linspace(np.arctan2(L/2,d),np.arctan2(-L/2,d),siz[1])+np.pi/2,
-            np.linspace(R+p,-z0+zmax,siz[0]))
+        th,r = backend.meshgrid(
+            backend.linspace(backend.arctan2(L/2,d),backend.arctan2(-L/2,d),siz[1])+backend.pi/2,
+            backend.linspace(R+p,-z0+zmax,siz[0]))
         x,z = pol2cart(th,r)
 
     z = z+z0
     return x, z
 
 def pol2cart(th, r):
-    return r*np.cos(th), r*np.sin(th)
+    backend = get_backend()
+    return r*backend.cos(th), r*backend.sin(th)

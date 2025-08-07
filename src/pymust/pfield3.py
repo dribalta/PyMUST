@@ -1,7 +1,7 @@
-import numpy as np
+from .backend import get_backend
 from . import utils
 
-# Ugly optimisation trick, of loop unraveling, as np.mean/np.sum has a large overhead for iterating over few dimesions
+# Ugly optimisation trick, of loop unraveling, as backend.mean/backend.sum has a large overhead for iterating over few dimesions
 # for i in range(1, 10):
 #   r = '+'.join([f'X[...,{j}]' for j in range(i)])
 #   print(f'average_function_by_i[{i}] = lambda X: ({r})/{i}')
@@ -20,12 +20,19 @@ def average_over_last_axis(X):
     if X.shape[-1] < len(average_function_by_i):
         return average_function_by_i[X.shape[-1] ](X)
     else:
-        return np.mean(X, axis = -1)
+        backend = get_backend()
+        return backend.mean(X, axis = -1)
 
-eps = np.finfo(np.float32).eps
-mysinc = lambda x = None: np.sin(np.abs(x) + eps)/ (np.abs(x) + eps) # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
+def get_eps():
+    backend = get_backend()
+    return backend.finfo(backend.float32).eps
+
+def mysinc(x=None):
+    backend = get_backend()
+    eps = get_eps()
+    return backend.sin(backend.abs(x) + eps) / (backend.abs(x) + eps)  # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
  
-def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
+def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
     """
     PFIELD3   3-D RMS acoustic pressure field of a planar 2-D array
     RP = PFIELD3(X,Y,Z,DELAYS,PARAM) returns the three-dimensional
@@ -209,12 +216,14 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     5) There is yet no publication for PFIELD3 (it is planned for 2023-24).
     """
 
+    backend = get_backend()
+    
     if x is None or (isinstance(x, list) and len(x) == 0):
-        x =  np.array([])
+        x = backend.array([])
     if y is None or (isinstance(y, list) and len(y) == 0):
-        y =  np.array([])
+        y = backend.array([])
     if z is None or (isinstance(z, list) and len(z) == 0):
-        z =  np.array([])
+        z = backend.array([])
        
     if options is None:
         if isinstance(isQuick, utils.Options):
@@ -232,7 +241,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     assert x.shape == y.shape and y.shape == z.shape, 'X, Y, and Z must be of same size.'
 
     #Check the transmit delays
-    assert utils.isnumeric(delaysTX) and all(delaysTX[~np.isnan(delaysTX)]>=0),'DELAYS must be a nonnegative array.'
+    assert utils.isnumeric(delaysTX) and all(delaysTX[~backend.isnan(delaysTX)]>=0),'DELAYS must be a nonnegative array.'
 
     NumberOfElements = delaysTX.shape[1]
     # Note: param.Nelements can be required in other functions of the
@@ -243,8 +252,8 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
 
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
-        delaysTX = delaysTX.reshape((1, -1), order='F')
-    delaysTX = delaysTX.astype(np.float32)
+        delaysTX = delaysTX.reshape((1, -1))
+    delaysTX = delaysTX.astype(backend.float32)
     
     # Check if PFIELD3 is called by SIMUS3
     isSIMUS3 = False
@@ -272,12 +281,12 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #-- 3) Element width (in m)
     assert 'width' in param, 'An element width (PARAM.width) is required.'
     ElementWidth = param.width
-    assert utils.isnumeric(ElementWidth) and np.isscalar(ElementWidth) and ElementWidth>0, 'The element width must be positive.'
+    assert utils.isnumeric(ElementWidth) and backend.isscalar(ElementWidth) and ElementWidth>0, 'The element width must be positive.'
 
     #-- 4) Element height (in m)
     assert 'height' in param, 'An element height (PARAM.height) is required with PFIELD3 and SIMUS3.'
     ElementHeight = param.height
-    assert utils.isnumeric(ElementHeight) and np.isscalar(ElementHeight) and ElementHeight>0,'The element height must be positive.'
+    assert utils.isnumeric(ElementHeight) and backend.isscalar(ElementHeight) and ElementHeight>0,'The element height must be positive.'
 
     #-- 5) Fractional bandwidth at -6dB (in %)
     if 'bandwidth' not in param:
@@ -294,7 +303,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         NonRigidBaffle = False
     elif param.baffle == 'soft':
         NonRigidBaffle = True
-    elif np.isscalar(param.baffle):
+    elif backend.isscalar(param.baffle):
         assert param.baffle>0, 'The "baffle" field scalar must be positive'
         NonRigidBaffle = True
     else:
@@ -312,20 +321,20 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         alpha_dB = 0
     else:
         alpha_dB = param.attenuation
-        assert np.isscalar(alpha_dB) and utils.isnumeric(alpha_dB) and alpha_dB>=0, 'PARAM.attenuation must be a nonnegative scalar'
+        assert backend.isscalar(alpha_dB) and utils.isnumeric(alpha_dB) and alpha_dB>=0, 'PARAM.attenuation must be a nonnegative scalar'
 
     #-- 9) Transmit apodization (no unit)
     if  'TXapodization' not in param:
-        param.TXapodization = np.ones((1,NumberOfElements), dtype = np.float32)
+        param.TXapodization = backend.ones((1,NumberOfElements), dtype=backend.float32)
     else:
-        if isinstance(param.TXapodization, np.ndarray) and len(param.TXapodization.shape) == 1:
-            param.TXapodization = param.TXapodization.reshape((1, -1), order='F')
+        if hasattr(param.TXapodization, 'shape') and len(param.TXapodization.shape) == 1:
+            param.TXapodization = param.TXapodization.reshape((1, -1))
         assert (len(param.TXapodization.shape) == 2 and param.TXapodization.shape[0] == 1) and utils.isnumeric(param.TXapodization), 'PARAM.TXapodization must be a vector'
         assert param.TXapodization.shape[1]==NumberOfElements, 'PARAM.TXapodization must be of length = (number of elements)'
 
     # apodization is 0 where TX delays are NaN:
-    idx = np.isnan(delaysTX)
-    param.TXapodization[0, np.any(idx, axis = 0)]= 0
+    idx = backend.isnan(delaysTX)
+    param.TXapodization[0, backend.any(idx, axis = 0)]= 0
     delaysTX[idx] = 0
 
     #-- 10) TX pulse: Number of wavelengths
@@ -333,18 +342,18 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         param.TXnow = 1
 
     NoW = param.TXnow
-    assert np.isscalar(NoW) and utils.isnumeric(NoW) and NoW>0, 'PARAM.TXnow must be a positive scalar.'
+    assert backend.isscalar(NoW) and utils.isnumeric(NoW) and NoW>0, 'PARAM.TXnow must be a positive scalar.'
 
     #-- 11) TX pulse: Frequency sweep for a linear chirp
-    if 'TXfreqsweep' not in param or np.isinf(NoW):
+    if 'TXfreqsweep' not in param or backend.isinf(NoW):
         param.TXfreqsweep = None
 
     FreqSweep = param.TXfreqsweep
-    assert FreqSweep is None or (np.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep>0), 'PARAM.TXfreqsweep must be empty (windowed sine) or a positive scalar (linear chirp).'
+    assert FreqSweep is None or (backend.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep>0), 'PARAM.TXfreqsweep must be empty (windowed sine) or a positive scalar (linear chirp).'
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = options.RC.astype(np.float32)
+        options.RC = options.RC.astype(backend.float32)
     
     #%----------------------------------%
     #% END of Check the PARAM structure %
@@ -363,7 +372,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     if 'dBThresh' not in options:
         options.dBThresh = -60 # default is -60dB in PFIELD3
 
-    assert np.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<=0,'OPTIONS.dBThresh must be a nonpositive scalar.'
+    assert backend.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<=0,'OPTIONS.dBThresh must be a nonpositive scalar.'
 
     #-- 2) Frequency-dependent directivity?
     if utils.isfield(options,'FullFrequencyDirectivity'):
@@ -373,7 +382,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         # By default, the directivity of the elements depends on the center
         # frequency only. This makes the algorithm faster. 
 
-    assert np.isscalar(isFFD) and isinstance(isFFD, bool) ,'OPTIONS.FullFrequencyDirectivity must be a logical scalar (true or false).'
+    assert backend.isscalar(isFFD) and isinstance(isFFD, bool) ,'OPTIONS.FullFrequencyDirectivity must be a logical scalar (true or false).'
 
     #-- 3) Element splitting
     #
@@ -387,17 +396,17 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         assert len(options.ElementSplitting) == 2, 'OPTIONS.ElementSplitting must be a two-element vector.'
         M = int(options.ElementSplitting[0])
         N = int(options.ElementSplitting[1])
-        assert np.isscalar(M) and M==np.round(M) and M>0 and np.isscalar(N) and N==np.round(N) and N>0, 'OPTIONS.ElementSplitting must contain two positive integers.'
+        assert backend.isscalar(M) and M==backend.round(M) and M>0 and backend.isscalar(N) and N==backend.round(N) and N>0, 'OPTIONS.ElementSplitting must contain two positive integers.'
     else:
         LambdaMin = c/(fc*(1+param.bandwidth/200))
-        M = int(np.ceil(ElementWidth/LambdaMin))
-        N = int(np.ceil(ElementHeight/LambdaMin))
+        M = int(backend.ceil(ElementWidth/LambdaMin))
+        N = int(backend.ceil(ElementHeight/LambdaMin))
 
     #-- 4) Wait bar NOTE GB: this does not do nothing yet
     if not utils.isfield(options,'WaitBar'):
         options.WaitBar = True
 
-    assert np.isscalar(options.WaitBar) and utils.islogical(options.WaitBar), 'OPTIONS.WaitBar must be a logical scalar (true or false).'
+    assert backend.isscalar(options.WaitBar) and utils.islogical(options.WaitBar), 'OPTIONS.WaitBar must be a logical scalar (true or false).'
 
     #-- Advanced (masked) options: Frequency step (scaling factor)
     # The frequency step is determined automatically. It is tuned to avoid
@@ -408,7 +417,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     if not utils.isfield(options,'FrequencyStep'):
         options.FrequencyStep = 1
 
-    assert np.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
+    assert backend.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
 
     #%------------------------------------%
     #% END of Check the OPTIONS structure %
@@ -430,17 +439,17 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         siz0 = (x.shape[0], 1)
     else:
         siz0 = x.shape
-    nx = np.prod(x.shape)
+    nx = backend.prod(backend.array(x.shape))
     
     #-- Coordinates of the points where pressure is needed
-    x = x.reshape((-1,1), order='F')
-    y = y.reshape((-1,1), order='F')
-    z = z.reshape((-1,1), order='F')
+    x = x.reshape((-1,1))
+    y = y.reshape((-1,1))
+    z = z.reshape((-1,1))
 
     # cast x, y, and z to single class
-    x = x.astype(np.float32)
-    y = y.astype(np.float32)
-    z = z.astype(np.float32)
+    x = x.astype(backend.float32)
+    y = y.astype(backend.float32)
+    z = z.astype(backend.float32)
 
     #-- Centroids of the sub-elements
     #-- note: Each elements is split into M-by-N sub-elements.
@@ -450,12 +459,12 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     # The values in yi are in the range ]-ElementHeight/2 ElementHeight/2[.
     # (if M = 1 and N = 1, then xi = yi = 0).
     SegWidth = ElementWidth/M
-    xi = -ElementWidth/2 + SegWidth/2 + np.arange(M)*SegWidth
+    xi = -ElementWidth/2 + SegWidth/2 + backend.arange(M)*SegWidth
     SegHeight = ElementHeight/N
-    yi = -ElementHeight/2 + SegHeight/2 + np.arange(N)*SegHeight
-    xi,yi = np.meshgrid(xi,yi)
-    xi = xi.reshape((1, 1,M*N), order='F')
-    yi = yi.reshape((1, 1,M*N), order='F')
+    yi = -ElementHeight/2 + SegHeight/2 + backend.arange(N)*SegHeight
+    xi, yi = backend.meshgrid(xi, yi)
+    xi = xi.reshape((1, 1, M*N))
+    yi = yi.reshape((1, 1, M*N))
 
     #-- Out-of-field points
     # Null pressure will be assigned to out-of-field points.
@@ -471,16 +480,16 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #       cosP = cosine phi.
     #       They are of size [numel(x) NumberOfElements M*N].
     #
-    dxi = x.reshape((-1,1,1), order='F')-xi-xe.reshape((1, -1, 1), order='F')
-    dyi = y.reshape((-1,1,1), order='F')-yi-ye.reshape((1, -1, 1), order='F')
+    dxi = x.reshape((-1,1,1))-xi-xe.reshape((1, -1, 1))
+    dyi = y.reshape((-1,1,1))-yi-ye.reshape((1, -1, 1))
     d2 = dxi**2+dyi**2
-    r = np.sqrt(d2+z.reshape((-1,1,1), order='F')**2).astype(np.float32)
+    r = backend.sqrt(d2+z.reshape((-1,1,1))**2).astype(backend.float32)
 
-    eps_sp = np.finfo(np.float32).eps
-    cosT = (np.expand_dims(z,axis=1)+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
-    sinT = (np.sqrt(d2)+eps_sp)/(r+eps_sp)
-    cosP = (dxi+eps_sp)/(np.sqrt(d2)+eps_sp)
-    sinP = (dyi+eps_sp)/(np.sqrt(d2)+eps_sp)
+    eps_sp = backend.finfo(backend.float32).eps
+    cosT = (backend.expand_dims(z,axis=1)+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
+    sinT = (backend.sqrt(d2)+eps_sp)/(r+eps_sp)
+    cosP = (dxi+eps_sp)/(backend.sqrt(d2)+eps_sp)
+    sinP = (dyi+eps_sp)/(backend.sqrt(d2)+eps_sp)
 
     #---
     # The term 1/r is present in the equations (problems if r is very small!):
@@ -519,21 +528,21 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         # One has exp[-i(k r + w delay)] = exp[-2i pi(f r/c + f delay)] in the Eq.
         # One wants: the phase increment 2pi(df r/c + df delay) be < 2pi.
         # Therefore: df < 1/(r/c + delay).
-        df = 1/(np.max(r/c) + np.max(delaysTX))
+        df = 1/(backend.max(r/c) + backend.max(delaysTX))
         df = options.FrequencyStep*df
         # note: df is here an upper bound; it will be recalculated below
         param.df = df
 
     #-- FREQUENCY SAMPLES
-    Nf = int(2*np.ceil(param.fc/df)+1) # number of frequency samples
-    f = np.linspace(0,2*param.fc,Nf) # frequency samples
+    Nf = int(2*backend.ceil(param.fc/df)+1) # number of frequency samples
+    f = backend.linspace(0,2*param.fc,Nf) # frequency samples
     df = f[1]  # update the frequency step
     #-- we keep the significant components only by using options.dBThresh
-    S = np.abs(pulseSpectrum(2*np.pi*f)*probeSpectrum(2*np.pi*f))
+    S = backend.abs(pulseSpectrum(2*backend.pi*f)*probeSpectrum(2*backend.pi*f))
 
-    GdB = 20*np.log10(1e-200 + S/np.max(S)) # gain in dB
-    id = np.where(GdB>options.dBThresh)
-    IDX = np.zeros(f.shape) != 0.
+    GdB = 20*backend.log10(1e-200 + S/backend.max(S)) # gain in dB
+    id = backend.where(GdB>options.dBThresh)
+    IDX = backend.zeros(f.shape) != 0.
     IDX[id[0][0]:id[0][-1]+1] = True
 
     f = f[IDX]
@@ -543,16 +552,16 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #   Note: The frequencies are shifted such that the center frequency for a
     #         a pulse-echo is exactly PARAM.fc.
     # pulse-echo spectrum
-    # F = pulseSpectrum(2*np.pi*f)*probeSpectrum(2*np.pi*f)**2
+    # F = pulseSpectrum(2*backend.pi*f)*probeSpectrum(2*backend.pi*f)**2
     # predicted center frequency
-    # P = np.abs(F)**2 # power
-    # Fc = np.trapz(f*P)/np.trapz(P)
+    # P = backend.abs(F)**2 # power
+    # Fc = backend.trapz(f*P)/backend.trapz(P)
     # corrected frequencies
     # f = f+Fc-fc
 
     #-- we need VECTORS
-    pulseSPECT = pulseSpectrum(2*np.pi*f) # pulse spectrum
-    probeSPECT = probeSpectrum(2*np.pi*f) # probe response
+    pulseSPECT = pulseSpectrum(2*backend.pi*f) # pulse spectrum
+    probeSPECT = probeSpectrum(2*backend.pi*f) # probe response
 
     #%--------------------------%
     #% end of FREQUENCY SPECTRA %
@@ -562,9 +571,9 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     RP = 0 # RP = Radiation Pattern
     if isSIMUS3:
         #- For SIMUS3 only (we need the full spectrum of RX signals):
-        SPECT = np.zeros((nSampling, NumberOfElements), dtype = np.complex64)
+        SPECT = backend.zeros((nSampling, NumberOfElements), dtype = backend.complex64)
     else:
-        SPECT = np.zeros((nSampling,nx),dtype=np.complex64)
+        SPECT = backend.zeros((nSampling,nx),dtype=backend.complex64)
 
     #-- Obliquity factor (baffle property)
     #   An obliquity factor is required if the baffle is not rigid.
@@ -575,7 +584,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         else: # param.baffle is a scalar
             ObliFac = cosT/(cosT+param.baffle)
     else: # 1 if rigid baffle
-        ObliFac = np.ones(cosT.shape, np.float32)
+        ObliFac = backend.ones(cosT.shape, backend.float32)
 
     #-- Note on Attenuation
     # Reference: Diagnostic ultrasound imaging - inside out (T.L. Szabo)
@@ -587,13 +596,13 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #   note: 20/log(10) ~ 8.69
 
     #-- EXPONENTIAL arrays of size [numel(x) NumberOfElements M]
-    kw = 2*np.pi*f[0]/c # wavenumber
+    kw = 2*backend.pi*f[0]/c # wavenumber
     kwa = alpha_dB/8.69*f[0]/1e6*1e2 # attenuation-based wavenumber
-    EXP = np.exp(-kwa*r + 1j*np.mod(kw*r,2*np.pi)).astype(np.complex64) # faster than exp(-kwa*r+1j*kw*r)
+    EXP = backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)).astype(backend.complex64) # faster than exp(-kwa*r+1j*kw*r)
     #-- Exponential array for the increment wavenumber dk
-    dkw = 2*np.pi*df/c
+    dkw = 2*backend.pi*df/c
     dkwa = alpha_dB/8.69*df/1e6*1e2
-    EXPdf = np.exp((-dkwa + 1j*dkw)*r).astype(np.complex64)
+    EXPdf = backend.exp((-dkwa + 1j*dkw)*r).astype(backend.complex64)
 
     #-- We replace EXP by EXP*ObliFac/r
     EXP = EXP*ObliFac/r
@@ -608,7 +617,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     # for-loop. These directivities DIRx and DIRy are included in the variable
     # EXP to reduce storage.
     if not isFFD:
-        kc = 2*np.pi*fc/c # center wavenumber
+        kc = 2*backend.pi*fc/c # center wavenumber
         DIRx = mysinc(kc*SegWidth/2*cosP*sinT) # x-directivity of each segment
         DIRy = mysinc(kc*SegHeight/2*sinP*sinT) # y-directivity of each segment
         EXP = EXP*DIRx*DIRy
@@ -618,13 +627,13 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #%-----------------------------%
     #% SUMMATION OVER THE SPECTRUM %
     #%-----------------------------%
-    EXP = EXP.astype(np.complex64)
+    EXP = EXP.astype(backend.complex64)
 
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
 
     for k in range(nSampling):
 
-        kw = 2*np.pi*f[k]/c # wavenumber
+        kw = 2*backend.pi*f[k]/c # wavenumber
 
         #-- Exponential array of size [numel(x) NumberOfElements MxN]
         # For all k, we need: EXP = exp((-kwa+1i*kw)*r)
@@ -656,17 +665,17 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
                 RPmono = EXP
 
         if len(RPmono.shape) == 3 and RPmono.shape[2] == 1:
-            RPmono = RPmono.reshape((RPmono.shape[0],RPmono.shape[1]), order='F')
+            RPmono = RPmono.reshape((RPmono.shape[0],RPmono.shape[1]))
 
 
         #-- Transmit delays + Transmit apodization
         # use of SUM: summation over the number of delay series (e.g. MLT)
         #GB WARNING, HERE delays are a row vector instead of a column as in matlab
 
-        DELAPOD = np.sum(np.exp(1j*kw*c*delaysTX), 0) *APOD
+        DELAPOD = backend.sum(backend.exp(1j*kw*c*delaysTX), 0) *APOD
 
         #-- Summing the radiation patterns generating by all the elements
-        RPk = RPmono@DELAPOD.reshape((-1, 1), order='F')
+        RPk = RPmono@DELAPOD.reshape((-1, 1))
 
         #- include spectrum responses:
         RPk = pulseSPECT[k]*RPk* probeSPECT[k]
@@ -677,16 +686,16 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
         if isSIMUS3: # Receive: for SIMUS3 only (spectra of the RF signals)
             SPECT[k,:] = probeSPECT[k]  # the array bandwidth is considered
 
-            SPECT[k,:] *= ((RPk.flatten(order='F')*options.RC.flatten(order='F')).reshape((1, -1), order='F') @ RPmono).flatten(order='F')  # pressure received by the elements)
-            # SPECT[k, :] *= np.dot(RPk.flatten()*options.RC.flatten(), RPmono ) # Trying to see if it is faster, no evidence whatsoever
+            SPECT[k,:] *= ((RPk.flatten()*options.RC.flatten()).reshape((1, -1)) @ RPmono).flatten()  # pressure received by the elements)
+            # SPECT[k, :] *= backend.dot(RPk.flatten()*options.RC.flatten(), RPmono ) # Trying to see if it is faster, no evidence whatsoever
             # *f(k)^2/fc^2; Rayleigh scattering (OPTIONAL)
 
-            if np.any(param.RXdelay != 0): # reception delays, if any
-                SPECT[k,:] = SPECT[k,:] *np.exp(1j*kw*c*param.RXdelay)
+            if backend.any(param.RXdelay != 0): # reception delays, if any
+                SPECT[k,:] = SPECT[k,:] *backend.exp(1j*kw*c*param.RXdelay)
         else:  # using PFIELD3 alone
             RP = RP + abs(RPk)**2 # acoustic intensity
 
-            SPECT[k,:] = RPk.flatten(order='F')
+            SPECT[k,:] = RPk.flatten()
 
 
     #%------------------------------------%
@@ -694,7 +703,7 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
     #%------------------------------------%
 
     # Correcting factor (including integration step, df)
-    if np.isinf(NoW):
+    if backend.isinf(NoW):
         CorFac = 1
     else:
         CorFac = df
@@ -704,8 +713,8 @@ def pfield3(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, p
 
     # RMS acoustic pressure (if we are in PFIELD3 only)
     if not isSIMUS3:
-        RP =np.sqrt(RP).reshape(siz0, order='F')
-        SPECT = np.moveaxis(SPECT, 0, -1)
-        SPECT = SPECT.reshape([siz0[0], siz0[1], siz0[2], nSampling], order='F')
+        RP = backend.sqrt(RP).reshape(siz0)
+        SPECT = backend.moveaxis(SPECT, 0, -1)
+        SPECT = SPECT.reshape([siz0[0], siz0[1], siz0[2], nSampling])
 
     return RP, SPECT, IDX

@@ -1,3 +1,6 @@
+# Backend system for PyMUST
+from . import backend
+
 interactiveDevelopment = False # Put it to True if you are developing pymust, in order to allow easier reloading of the modules
 if not interactiveDevelopment:
     from pymust.bmode import bmode

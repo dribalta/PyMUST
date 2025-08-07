@@ -2,9 +2,9 @@ from __future__ import annotations
 import scipy, scipy.interpolate
 from typing import Union
 from . import utils
-import numpy as np
+from .backend import get_backend
 
-def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]  = None, g: Union[np.ndarray, float] = None)  -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def genscat(roidim, meandist, I=None, g=None):
     """
     %GENSCAT   Generate a distribution of scatterers
     %   [XS,YS,ZS] = GENSCAT([WIDTH HEIGHT],MEANDIST) generates a 2-D
@@ -83,11 +83,13 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
     %   href="matlab:web('http://www.biomecardio.com')">www.BiomeCardio.com</a>
     """
 
+    backend = get_backend()
+    
     #%-- Check the input arguments
     if isinstance(roidim, list):
-        roidim = np.array(roidim)
+        roidim = backend.array(roidim)
         
-    assert utils.isnumeric(roidim) and isinstance(roidim, np.ndarray), 'The 1st argument must be a numeric vector.'
+    assert utils.isnumeric(roidim) and hasattr(roidim, 'shape'), 'The 1st argument must be a numeric vector.'
     assert len(roidim)==2 or len(roidim)==3, 'The 1st argument must be a vector of length 2 or 3.'
     if isinstance(meandist, utils.Param):
         #%-- The input is PARAM
@@ -115,34 +117,34 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
         assert isinstance(meandist, float) and meandist>0, 'MEANDIST must be a positive scalar.'
     
     if I is not None:
-        assert len(I.shape) in [2, 3] and np.all(I>=0), 'I must be 2-D or 3-D with non-negative elements.'
+        assert len(I.shape) in [2, 3] and backend.all(I>=0), 'I must be 2-D or 3-D with non-negative elements.'
         assert len(roidim)== len(I.shape), 'The number of dimensions of I does not match the length of the 1st argument.'
     else:
-        assert np.all(np.isfinite(roidim)), 'The 1st argument must contain only finite elements if I is not given.'
+        assert backend.all(backend.isfinite(roidim)), 'The 1st argument must contain only finite elements if I is not given.'
         assert g is None, 'The 4th argument g cannot be used if I is not given.' #Note GB: actually a warning should be enough
 
     ##%-- Calculate xmin, xmax, ymin, ymax, and zmax (we have zmin = 0)
     width,height  = roidim
     #%
     if len(roidim)==2: #% 2-D
-        assert np.any((np.isfinite(roidim))), 'The vector [WIDTH HEIGHT] must contain at least one finite element.'
+        assert backend.any(backend.isfinite(roidim)), 'The vector [WIDTH HEIGHT] must contain at least one finite element.'
         if I is not None:
             m,n = I.shape
-            if not np.isfinite(width):
+            if not backend.isfinite(width):
                 width = n*height/m
-            if not np.isfinite(height):
+            if not backend.isfinite(height):
                 height = m*width/n
     else:  # 3-D
-        tmp = np.sum(np.isfinite(roidim))
+        tmp = backend.sum(backend.isfinite(roidim))
         assert tmp==1 or tmp==3, 'The vector [WIDTH HEIGHT DEPTH] must contain one or three finite elements.'
         depth = roidim[2] 
         if I is not None:
             m,n,p = I.shape
-            if not np.all(np.isfinite(roidim)): #% [WIDTH HEIGHT DEPTH] contains NaN or Inf
-                if np.isfinite(height):
+            if not backend.all(backend.isfinite(roidim)): #% [WIDTH HEIGHT DEPTH] contains NaN or Inf
+                if backend.isfinite(height):
                     width = n*height/m
                     depth = p*height/m
-                elif np.isfinite(width):
+                elif backend.isfinite(width):
                     height = m*width/n
                     depth = p*width/n
                 else:
@@ -162,34 +164,34 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
     if len(roidim)==2: #% 2-D
         #%-- 2-D pseudorandom distribution --
         
-        xz_inc = meandist/np.sqrt(2/5)
+        xz_inc = meandist/backend.sqrt(2/5)
         #% note: sqrt(2/5) was determined numerically (theory = ?...)
         
-        xs,zs =np.meshgrid( np.arange(xmin, xmax, xz_inc), np.arange(zmin, zmax, xz_inc))
-        xs = xs + np.random.rand(*xs.shape)*xz_inc-xz_inc/2
-        zs = zs + np.random.rand(*zs.shape)*xz_inc-xz_inc/2
+        xs,zs = backend.meshgrid(backend.arange(xmin, xmax, xz_inc), backend.arange(zmin, zmax, xz_inc))
+        xs = xs + backend.random.rand(*xs.shape)*xz_inc-xz_inc/2
+        zs = zs + backend.random.rand(*zs.shape)*xz_inc-xz_inc/2
         
-        idx = np.logical_and(np.logical_and(xs>xmin, xs<xmax), np.logical_and(zs>zmin, zs<zmax))
+        idx = backend.logical_and(backend.logical_and(xs>xmin, xs<xmax), backend.logical_and(zs>zmin, zs<zmax))
         xs = xs[idx]
         zs = zs[idx]
         
-        ys = np.zeros(xs.shape)
+        ys = backend.zeros(xs.shape)
 
     else: #% 3-D
         #%-- 3-D pseudorandom distribution --
         
-        xyz_inc = meandist/np.sqrt(16/39)
+        xyz_inc = meandist/backend.sqrt(16/39)
         #% note: sqrt(16/39) was determined numerically (theory = ?...)
         
-        xs,ys,zs = np.meshgrid(np.arange(xmin, xmax, xz_inc), 
-                               np.arange(ymin, ymax, xz_inc),
-                               np.arange(zmin, zmax, xz_inc))
-        xs = xs + np.random.rand(*xs.shape)*xz_inc-xz_inc/2
-        zs = zs + np.random.rand(*zs.shape)*xz_inc-xz_inc/2
-        ys = ys + np.random.rand(*ys.shape)*xz_inc-xz_inc/2
+        xs,ys,zs = backend.meshgrid(backend.arange(xmin, xmax, xyz_inc), 
+                               backend.arange(ymin, ymax, xyz_inc),
+                               backend.arange(zmin, zmax, xyz_inc))
+        xs = xs + backend.random.rand(*xs.shape)*xyz_inc-xyz_inc/2
+        zs = zs + backend.random.rand(*zs.shape)*xyz_inc-xyz_inc/2
+        ys = ys + backend.random.rand(*ys.shape)*xyz_inc-xyz_inc/2
 
         
-        idx = np.logical_and.reduce((xs>xmin, xs<xmax, ys>ymin, ys<ymax, zs>zmin, zs<zmax))
+        idx = backend.logical_and.reduce((xs>xmin, xs<xmax, ys>ymin, ys<ymax, zs>zmin, zs<zmax))
         xs = xs[idx]
         ys = ys[idx]
         zs = zs[idx]
@@ -197,7 +199,7 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
 
 
     #% Random reordering
-    idx = np.random.permutation(len(xs))
+    idx = backend.random.permutation(len(xs))
     xs = xs[idx]
     ys = ys[idx]
     zs = zs[idx]
@@ -206,12 +208,12 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
     #%-- If no I: the reflection coefficients follow a Rayleigh
     #%            distribution of mean 1
     if I is None:
-        RC = np.random.rayleigh(1,xs.shape)/np.sqrt(np.pi/2)
+        RC = backend.random.rayleigh(1,xs.shape)/backend.sqrt(backend.pi/2)
 
     else:
 
         I = I.astype(float)
-        I = I/np.max(I)
+        I = I/backend.max(I)
 
 
         #%-- Image grid
@@ -221,7 +223,7 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
             nl,nc = I.shape
             dxi = (xmax-xmin)/nc
             dzi = (zmax-zmin)/nl
-            xi,zi = np.linspace(xmin-dxi/2,xmax-dxi/2,nc), np.linspace(zmin+dzi/2,zmax-dzi/2,nl)
+            xi,zi = backend.linspace(xmin-dxi/2,xmax-dxi/2,nc), backend.linspace(zmin+dzi/2,zmax-dzi/2,nl)
             
         elif  len(roidim)==3:
             #%-- 3-D image grid    
@@ -230,9 +232,9 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
             dxi = (xmax-xmin)/nc
             dyi = (ymax-ymin)/nr
             dzi = (zmax-zmin)/nl
-            xi,zi,yi = np.linspace(xmin+dxi/2,xmax-dxi/2,nc), \
-                np.linspace(zmin+dzi/2,zmax-dzi/2,nl), \
-                np.linspace(ymin+dyi/2,ymax-dyi/2,np)
+            xi,zi,yi = backend.linspace(xmin+dxi/2,xmax-dxi/2,nc), \
+                backend.linspace(zmin+dzi/2,zmax-dzi/2,nl), \
+                backend.linspace(ymin+dyi/2,ymax-dyi/2,nr)
         else:
             raise ValueError('Incorrect roidim size')
 
@@ -243,20 +245,20 @@ def genscat(roidim: np.ndarray, meandist: np.ndarray ,I: Union[np.ndarray, None]
         
         if len(roidim)==2:
             interp =  scipy.interpolate.RegularGridInterpolator([xi,zi], I.T, method = 'linear', fill_value=0, bounds_error = False)
-            RC = interp(np.stack([xs,zs], axis = -1))
+            RC = interp(backend.stack([xs,zs], axis = -1))
         elif len(roidim)==3:
             interp =  scipy.interpolate.RegularGridInterpolator([xi, yi, zi], I, method = 'linear', fill_value=0, bounds_error = False)
-            RC = interp(np.stack([xs,ys,zs], axis = -1))
+            RC = interp(backend.stack([xs,ys,zs], axis = -1))
         
         if g>1:
             #% log compression
-            RC = np.power(10,(g/20*(RC-1)))
+            RC = backend.power(10,(g/20*(RC-1)))
         else:
             #% gamma compression
-            RC = np.power(RC, 1/g)
+            RC = backend.power(RC, 1/g)
 
         #% add some randomness in the reflection coefficients
         #% RC = RC.*raylrnd(1,1,length(xs))'/sqrt(pi/2);
-        RC = RC*np.hypot(np.random.rand(*xs.shape),np.random.rand(*xs.shape))/np.sqrt(np.pi/2)
+        RC = RC*backend.hypot(backend.random.rand(*xs.shape),backend.random.rand(*xs.shape))/backend.sqrt(backend.pi/2)
 
     return xs,ys,zs,RC

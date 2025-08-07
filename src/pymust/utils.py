@@ -1,7 +1,8 @@
-import numpy as np, scipy, scipy.interpolate, multiprocessing, multiprocessing.pool
+import scipy, scipy.interpolate, multiprocessing, multiprocessing.pool
 from abc import ABC
 import inspect, matplotlib, pickle, os, matplotlib.pyplot as plt, copy
 from collections import deque
+from .backend import get_backend
 
 
 class dotdict(dict, ABC):
@@ -68,10 +69,11 @@ class Options(dotdict):
 
         n_threads = self.get('ParPool_NumWorkers', self.default_Number_Workers) if n_threads is None else n_threads
         #Create indices for parallel processing, split in workers
-        idx = np.arange(0, N, N//n_threads)
+        backend = get_backend()
+        idx = backend.arange(0, N, N//n_threads)
 
         #Repeat along new axis
-        idx = np.stack([idx, np.roll(idx, -1)], axis = 1)
+        idx = backend.stack([idx, backend.roll(idx, -1)], axis = 1)
         idx[-1, 1] = N
         return idx
 
@@ -91,21 +93,22 @@ class Param(dotdict):
         RadiusOfCurvature = self.radius
         NumberOfElements = self.Nelements
 
-        if np.isinf(RadiusOfCurvature):
+        backend = get_backend()
+        if backend.isinf(RadiusOfCurvature):
             #% Linear array
-            xe =  (np.arange(NumberOfElements)-(NumberOfElements-1)/2)*self.pitch
-            ze = np.zeros((1,NumberOfElements))
-            THe = np.zeros_like(ze)
-            h = np.zeros_like(ze)
+            xe =  (backend.arange(NumberOfElements)-(NumberOfElements-1)/2)*self.pitch
+            ze = backend.zeros((1,NumberOfElements))
+            THe = backend.zeros_like(ze)
+            h = backend.zeros_like(ze)
         else:
             #% Convex array
-            chord = 2*RadiusOfCurvature*np.sin(np.arcsin(self.pitch/2/RadiusOfCurvature)*(NumberOfElements-1))
-            h = np.sqrt(RadiusOfCurvature**2-chord**2/4); #% apothem
+            chord = 2*RadiusOfCurvature*backend.sin(backend.arcsin(self.pitch/2/RadiusOfCurvature)*(NumberOfElements-1))
+            h = backend.sqrt(RadiusOfCurvature**2-chord**2/4); #% apothem
             #% https://en.wikipedia.org/wiki/Circular_segment
             #% THe = angle of the normal to element #e with respect to the z-axis
-            THe = np.linspace(np.arctan2(-chord/2,h),np.arctan2(chord/2,h),NumberOfElements)
-            ze = RadiusOfCurvature*np.cos(THe)
-            xe = RadiusOfCurvature*np.sin(THe)
+            THe = backend.linspace(backend.arctan2(-chord/2,h),backend.arctan2(chord/2,h),NumberOfElements)
+            ze = RadiusOfCurvature*backend.cos(THe)
+            xe = RadiusOfCurvature*backend.sin(THe)
             ze = ze-h
         return xe.reshape((1,-1)), ze.reshape((1,-1)), THe.reshape((1,-1)), h.reshape((1,-1))
     
@@ -117,15 +120,17 @@ class Param(dotdict):
         if FreqSweep is None:
             # We want a windowed sine of width PARAM.TXnow
             T = self.TXnow /self.fc
-            wc = 2 * np.pi * self.fc
+            backend = get_backend()
+            wc = 2 * backend.pi * self.fc
             pulseSpectrum = lambda w = None: 1j * (mysinc(T * (w - wc) / 2) - mysinc(T * (w + wc) / 2))
         else:
             # We want a linear chirp of width PARAM.TXnow
             # (https://en.wikipedia.org/wiki/Chirp_spectrum#Linear_chirp)
             T = self.TXnow / self.fc
-            wc = 2 * np.pi * self.fc
-            dw = 2 * np.pi * FreqSweep
-            s2 = lambda w = None: np.multiply(np.sqrt(np.pi * T / dw) * np.exp(- 1j * (w - wc) ** 2 * T / 2 / dw),(fresnelint((dw / 2 + w - wc) / np.sqrt(np.pi * dw / T)) + fresnelint((dw / 2 - w + wc) / np.sqrt(np.pi * dw / T))))
+            backend = get_backend()
+            wc = 2 * backend.pi * self.fc
+            dw = 2 * backend.pi * FreqSweep
+            s2 = lambda w = None: backend.multiply(backend.sqrt(backend.pi * T / dw) * backend.exp(- 1j * (w - wc) ** 2 * T / 2 / dw),(fresnelint((dw / 2 + w - wc) / backend.sqrt(backend.pi * dw / T)) + fresnelint((dw / 2 - w + wc) / backend.sqrt(backend.pi * dw / T))))
             pulseSpectrum = lambda w = None: (1j * s2(w) - 1j * s2(- w)) / T
         return pulseSpectrum
 
@@ -136,27 +141,33 @@ class Param(dotdict):
         #-- FREQUENCY RESPONSE of the ensemble PZT + probe
         # We want a generalized normal window (6dB-bandwidth = PARAM.bandwidth)
         # (https://en.wikipedia.org/wiki/Window_function#Generalized_normal_window)
-        wc = 2 * np.pi * self.fc
+        backend = get_backend()
+        wc = 2 * backend.pi * self.fc
         wB = self.bandwidth * wc / 100
-        p = np.log(126) / np.log(2 * wc / wB)
-        probeSpectrum_sqr = lambda w: np.exp(- np.power(np.abs(w - wc) / (wB / 2 / np.power(np.log(2), 1 / p)), p))
+        p = backend.log(126) / backend.log(2 * wc / wB)
+        probeSpectrum_sqr = lambda w: backend.exp(- backend.power(backend.abs(w - wc) / (wB / 2 / backend.power(backend.log(2), 1 / p)), p))
         # The frequency response is a pulse-echo (transmit + receive) response. A
         # square root is thus required when calculating the pressure field:
-        probeSpectrum = lambda w: np.sqrt(probeSpectrum_sqr(w))
+        probeSpectrum = lambda w: backend.sqrt(probeSpectrum_sqr(w))
         return probeSpectrum
     
 # To maintain same notation as matlab
 def interp1(y, xNew, kind):
     if kind == 'spline':
         kind = 'cubic' #3rd order spline
-    interpolator = scipy.interpolate.interp1d(np.arange(len(y)), y, kind = kind) 
+    backend = get_backend()
+    interpolator = scipy.interpolate.interp1d(backend.arange(len(y)), y, kind = kind) 
     return interpolator(xNew)    
 
 def isnumeric(x):
-    return isinstance(x, np.ndarray) or isinstance(x, int) or isinstance(x, float) or isinstance(x, np.number)
+    backend = get_backend()
+    return backend.is_array(x) or isinstance(x, int) or isinstance(x, float) or hasattr(x, '__array__')
 
 def iscomplex(x):
-    return (isinstance(x, np.ndarray) and np.iscomplexobj(x)) or isinstance(x, complex)
+    backend = get_backend()
+    if backend.is_array(x):
+        return backend.iscomplexobj(x)
+    return isinstance(x, complex)
 
 def islogical(v):
     return isinstance(v, bool)
@@ -164,7 +175,10 @@ def islogical(v):
 def isfield(d, k ):
     return k in d
 
-mysinc = lambda x = None: np.sinc(x / np.pi) # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
+def mysinc(x=None):
+    """MATLAB-compatible sinc function."""
+    backend = get_backend()
+    return backend.sinc(x / backend.pi)  # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
 
 
 def shiftdim(array, n=None):
@@ -176,8 +190,10 @@ def shiftdim(array, n=None):
             axes = tuple(range(len(array.shape)))
             new_axes = deque(axes)
             new_axes.rotate(n)
-            return np.moveaxis(array, axes, tuple(new_axes))
-        return np.expand_dims(array, axis=tuple(range(-n)))
+            backend = get_backend()
+            return backend.moveaxis(array, axes, tuple(new_axes))
+        backend = get_backend()
+        return backend.expand_dims(array, axis=tuple(range(-n)))
     else:
         idx = 0
         for dim in array.shape:
@@ -187,14 +203,17 @@ def shiftdim(array, n=None):
                 break
         axes = tuple(range(idx))
         # Note that this returns a tuple of 2 results
-        return np.squeeze(array, axis=axes), len(axes)
+        backend = get_backend()
+        return backend.squeeze(array, axis=axes), len(axes)
 
 def isEmpty(x):
-    return  x is None or (isinstance(x, list) and len(x) == 0) or (isinstance(x, np.ndarray) and len(x) == 0)
+    backend = get_backend()
+    return  x is None or (isinstance(x, list) and len(x) == 0) or (backend.is_array(x) and len(x) == 0)
 
 def emptyArrayIfNone(x):
     if isEmpty(x):
-        x =  np.array([])
+        backend = get_backend()
+        x = backend.array([])
     return x
 
 def eps(s = 'single'):
@@ -218,35 +237,36 @@ def fresnelint(x):
 #       Klaus D. Mielenz, Computation of Fresnel Integrals. II
 #       J. Res. Natl. Inst. Stand. Technol. 105, 589 (2000), pp 589-590
     
+    backend = get_backend()
     siz0 = x.shape
     x = x.flatten()
 
-    issmall = np.abs(x) <= 1.6
-    c = np.zeros(x.shape)
-    s = np.zeros(x.shape)
+    issmall = backend.abs(x) <= 1.6
+    c = backend.zeros(x.shape)
+    s = backend.zeros(x.shape)
     # When |x| < 1.6, a Taylor series is used (see Mielenz's paper)
-    if np.any(issmall):
-        n = np.arange(0,11)
-        cn = np.concatenate([[1], np.cumprod(- np.pi ** 2 * (4 * n + 1) / (4 * (2 * n + 1) *(2 * n + 2)*(4 * n + 5)))])
-        sn = np.concatenate([[1],np.cumprod(- np.pi ** 2 * (4 * n + 3) / (4 * (2 * n + 2)*(2 * n + 3)*(4 * n + 7)))]) * np.pi / 6
-        n = np.concatenate([n,[11]]).reshape((1,-1))
-        c[issmall] = np.sum(cn.reshape((1,-1))*x[issmall].reshape((-1, 1))  ** (4 * n + 1), 1)
-        s[issmall] = np.sum(sn.reshape((1,-1))*x[issmall].reshape((-1, 1)) ** (4 * n + 3), 1)
+    if backend.any(issmall):
+        n = backend.arange(0,11)
+        cn = backend.concatenate([[1], backend.cumprod(- backend.pi ** 2 * (4 * n + 1) / (4 * (2 * n + 1) *(2 * n + 2)*(4 * n + 5)))])
+        sn = backend.concatenate([[1],backend.cumprod(- backend.pi ** 2 * (4 * n + 3) / (4 * (2 * n + 2)*(2 * n + 3)*(4 * n + 7)))]) * backend.pi / 6
+        n = backend.concatenate([n,[11]]).reshape((1,-1))
+        c[issmall] = backend.sum(cn.reshape((1,-1))*x[issmall].reshape((-1, 1))  ** (4 * n + 1), 1)
+        s[issmall] = backend.sum(sn.reshape((1,-1))*x[issmall].reshape((-1, 1)) ** (4 * n + 3), 1)
     
     # When |x| > 1.6, we use the following:
-    if not np.all(issmall ):
-        n = np.arange(0,11+1)
-        fn = np.array([0.318309844,9.34626e-08,- 0.09676631,0.000606222,0.325539361,0.325206461,- 7.450551455,32.20380908,- 78.8035274,118.5343352,- 102.4339798,39.06207702])
+    if not backend.all(issmall ):
+        n = backend.arange(0,11+1)
+        fn = backend.array([0.318309844,9.34626e-08,- 0.09676631,0.000606222,0.325539361,0.325206461,- 7.450551455,32.20380908,- 78.8035274,118.5343352,- 102.4339798,39.06207702])
         fn = fn.reshape((1, fn.shape[0]))
-        gn = np.array([0,0.101321519,- 4.07292e-05,- 0.152068115,- 0.046292605,1.622793598,- 5.199186089,7.477942354,- 0.695291507,- 15.10996796,22.28401942,- 10.89968491])
+        gn = backend.array([0,0.101321519,- 4.07292e-05,- 0.152068115,- 0.046292605,1.622793598,- 5.199186089,7.477942354,- 0.695291507,- 15.10996796,22.28401942,- 10.89968491])
         gn = gn.reshape((1, gn.shape[0]))
 
-        fx = np.sum(np.multiply(fn,x[not issmall ] ** (- 2 * n - 1)), 1)
-        gx = np.sum(np.multiply(gn,x[not issmall ] ** (- 2 * n - 1)), 1)
-        c[not issmall ] = 0.5 * np.sign(x[not issmall ]) + np.multiply(fx,np.sin(np.pi / 2 * x[not issmall ] ** 2)) - np.multiply(gx,np.cos(np.pi / 2 * x[not issmall ] ** 2))
-        s[not issmall ] = 0.5 * np.sign(x[not issmall ]) - np.multiply(fx,np.cos(np.pi / 2 * x[not issmall ] ** 2)) - np.multiply(gx,np.sin(np.pi / 2 * x[not issmall ] ** 2))
+        fx = backend.sum(backend.multiply(fn,x[not issmall ] ** (- 2 * n - 1)), 1)
+        gx = backend.sum(backend.multiply(gn,x[not issmall ] ** (- 2 * n - 1)), 1)
+        c[not issmall ] = 0.5 * backend.sign(x[not issmall ]) + backend.multiply(fx,backend.sin(backend.pi / 2 * x[not issmall ] ** 2)) - backend.multiply(gx,backend.cos(backend.pi / 2 * x[not issmall ] ** 2))
+        s[not issmall ] = 0.5 * backend.sign(x[not issmall ]) - backend.multiply(fx,backend.cos(backend.pi / 2 * x[not issmall ] ** 2)) - backend.multiply(gx,backend.sin(backend.pi / 2 * x[not issmall ] ** 2))
     
-    f = np.reshape(c, siz0) + 1j * np.reshape(s, siz0)
+    f = backend.reshape(c, siz0) + 1j * backend.reshape(s, siz0)
     return f
 
 

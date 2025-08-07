@@ -1,6 +1,6 @@
 
-import numpy as np
 from . import utils
+from .backend import get_backend
 
 # Ugly optimisation trick, of loop unraveling, as np.mean/np.sum has a large overhead for iterating over few dimesions
 # for i in range(1, 10):
@@ -21,15 +21,20 @@ def average_over_last_axis(X):
     if X.shape[-1] < len(average_function_by_i):
         return average_function_by_i[X.shape[-1] ](X)
     else:
-        return np.mean(X, axis = -1)
+        backend = get_backend()
+        return backend.mean(X, axis = -1)
 
 eps = 1e-16
-mysinc = lambda x = None: np.sin(np.abs(x) + eps)/ (np.abs(x) + eps) # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
+def mysinc(x=None):
+    """Sinc function using current backend."""
+    backend = get_backend()
+    eps = 1e-16
+    return backend.sin(backend.abs(x) + eps) / (backend.abs(x) + eps)
 
 #GB TODO: add wait bar
 #GB TODO: allow parallelization
 
-def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
+def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
 #PFIELD   RMS acoustic pressure field of a linear or convex array
 #   RP = PFIELD(X,Y,Z,DELAYS,PARAM) returns the radiation pattern of a
 #   uniform LINEAR or CONVEX array whose elements are excited at different
@@ -197,12 +202,13 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
 #      of PFIELD is under review.
 #
 
+    backend = get_backend()
     if x is None or (isinstance(x, list) and len(x) == 0):
-        x =  np.array([])
+        x = backend.array([])
     if y is None or (isinstance(y, list) and len(y) == 0):
-        y =  np.array([])
+        y = backend.array([])
     if z is None or (isinstance(z, list) and len(z) == 0):
-        z =  np.array([])
+        z = backend.array([])
 
     if options is None:
         if isinstance(isQuick, utils.Options):
@@ -217,10 +223,10 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         options.FullFrequencyDirectivity = False
         options.FrequencyStep = 1.5
 
-    if y is None or len(y) == 0 or np.all(np.abs(y) < 1e-9):
+    if y is None or len(y) == 0 or backend.all(backend.abs(y) < 1e-9):
         ElevationFocusing = False
-        assert np.array_equal(x.shape, z.shape), 'X and Z must be of same size.'
-        y = np.zeros(x.shape, dtype = np.float32)
+        assert backend.array_equal(x.shape, z.shape), 'X and Z must be of same size.'
+        y = backend.zeros(x.shape, dtype=backend.float32)
     else:
         ElevationFocusing = True
         assert x.shape == y.shape and y.shape == z.shape, 'X, Y, and Z must be of same size.'
@@ -229,7 +235,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #assert len(delaysTX.shape) == 2., 'G. Bernardino: DELAYS must be a single row array. Multiline transmit still not  implemented in Python.'
     
     #Check the transmit delays
-    assert utils.isnumeric(delaysTX) and all(delaysTX[~np.isnan(delaysTX)]>=0),  'DELAYS must be a nonnegative array.'
+    assert utils.isnumeric(delaysTX) and all(delaysTX[~backend.isnan(delaysTX)]>=0),  'DELAYS must be a nonnegative array.'
 
     NumberOfElements = delaysTX.shape[1]
     # Note: param.Nelements can be required in other functions of the
@@ -247,7 +253,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
         delaysTX = delaysTX.reshape((1, -1))
-    delaysTX = delaysTX.astype(np.float32)
+    delaysTX = delaysTX.astype(backend.float32)
     # Check if PFIELD is called by SIMUS or MKMOVIE
     isSIMUS = False
     isMKMOVIE = False
@@ -275,7 +281,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
 
     #%-- 3) Element width and/or Kerf width (in m)
     if 'width' in param and 'kerf' in param:
-        assert np.abs(pitch-param.width-param.kerf)<utils.eps('single'), 'The pitch must be equal to (kerf width + element width).'
+        assert backend.abs(pitch-param.width-param.kerf)<utils.eps('single'), 'The pitch must be equal to (kerf width + element width).'
     elif 'kerf' in param:
         param.width = pitch-param.kerf
     elif 'width' in param:
@@ -286,24 +292,24 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
 
     #%-- 4) Elevation focus (in m)
     if 'focus' not in param:
-        param.focus = np.inf # default = no elevation focusing
+        param.focus = backend.inf # default = no elevation focusing
 
     Rf = param.focus
-    assert utils.isnumeric(Rf) and np.isscalar(Rf) and Rf>0, 'The element focus must be positive.'
+    assert utils.isnumeric(Rf) and backend.isscalar(Rf) and Rf>0, 'The element focus must be positive.'
 
     #%-- 5) Element height (in m)
     if  'height' not in param:
-        param.height = np.inf # default = line array
+        param.height = backend.inf # default = line array
 
     ElementHeight = param.height
-    assert utils.isnumeric(ElementHeight) and np.isscalar(ElementHeight) and ElementHeight>0,'The element height must be positive.'
+    assert utils.isnumeric(ElementHeight) and backend.isscalar(ElementHeight) and ElementHeight>0,'The element height must be positive.'
 
     #%-- 6) Radius of curvature (in m) - convex array
     if 'radius' not in param:
-        param.radius = np.inf # default = linear array
+        param.radius = backend.inf # default = linear array
 
     RadiusOfCurvature = param.radius
-    assert utils.isnumeric(RadiusOfCurvature) and np.isscalar(RadiusOfCurvature) and RadiusOfCurvature>0,'The radius of curvature must be positive.'
+    assert utils.isnumeric(RadiusOfCurvature) and backend.isscalar(RadiusOfCurvature) and RadiusOfCurvature>0,'The radius of curvature must be positive.'
 
     #%-- 7) Fractional bandwidth at -6dB (in %)
     if 'bandwidth' not in param:
@@ -321,7 +327,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         NonRigidBaffle = False
     elif param.baffle == 'soft':
         NonRigidBaffle = True
-    elif np.isscalar(param.baffle):
+    elif backend.isscalar(param.baffle):
         assert param.baffle>0, 'The "baffle" field scalar must be positive'
         NonRigidBaffle = True
     else:
@@ -339,21 +345,21 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         alpha_dB = 0
     else:
         alpha_dB = param.attenuation
-        assert np.isscalar(alpha_dB) and utils.isnumeric(alpha_dB) and alpha_dB>=0, 'PARAM.attenuation must be a nonnegative scalar'
+        assert backend.isscalar(alpha_dB) and utils.isnumeric(alpha_dB) and alpha_dB>=0, 'PARAM.attenuation must be a nonnegative scalar'
 
 
     #%-- 11) Transmit apodization (no unit)
     if  'TXapodization' not in param:
-        param.TXapodization = np.ones((1,NumberOfElements), dtype = np.float32)
+        param.TXapodization = backend.ones((1,NumberOfElements), dtype = backend.float32)
     else:
-        if isinstance(param.TXapodization, np.ndarray) and len(param.TXapodization.shape) == 1:
+        if len(param.TXapodization.shape) == 1:
             param.TXapodization = param.TXapodization.reshape((1, -1))
         assert (len(param.TXapodization.shape) == 2 and param.TXapodization.shape[0] == 1) and utils.isnumeric(param.TXapodization), 'PARAM.TXapodization must be a vector'
         assert param.TXapodization.shape[1]==NumberOfElements, 'PARAM.TXapodization must be of length = (number of elements)'
 
     #% apodization is 0 where TX delays are NaN:
-    idx = np.isnan(delaysTX)
-    param.TXapodization[0, np.any(idx, axis = 0)]= 0
+    idx = backend.isnan(delaysTX)
+    param.TXapodization[0, backend.any(idx, axis = 0)]= 0
     delaysTX[idx] = 0
 
     # 12) TX pulse: Number of wavelengths
@@ -361,14 +367,14 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         param.TXnow = 1
 
     NoW = param.TXnow
-    assert np.isscalar(NoW) and utils.isnumeric(NoW) and NoW>0, 'PARAM.TXnow must be a positive scalar.'
+    assert backend.isscalar(NoW) and utils.isnumeric(NoW) and NoW>0, 'PARAM.TXnow must be a positive scalar.'
 
     #%-- 13) TX pulse: Frequency sweep for a linear chirp
-    if 'TXfreqsweep' not in param or np.isinf(NoW):
+    if 'TXfreqsweep' not in param or backend.isinf(NoW):
         param.TXfreqsweep = None
 
     FreqSweep = param.TXfreqsweep
-    assert FreqSweep is None or (np.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep>0), 'PARAM.TXfreqsweep must be empty (windowed sine) or a positive scalar (linear chirp).'
+    assert FreqSweep is None or (backend.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep>0), 'PARAM.TXfreqsweep must be empty (windowed sine) or a positive scalar (linear chirp).'
 
     #%----------------------------------%
     #% END of Check the PARAM structure %
@@ -387,7 +393,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     if 'dBThresh' not in options:
         options.dBThresh = -60 # default is -60dB in PFIELD
 
-    assert np.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<=0,'OPTIONS.dBThresh must be a nonpositive scalar.'
+    assert backend.isscalar(options.dBThresh) and utils.isnumeric(options.dBThresh) and options.dBThresh<=0,'OPTIONS.dBThresh must be a nonpositive scalar.'
 
     #%-- 2) Frequency-dependent directivity?
     if utils.isfield(options,'FullFrequencyDirectivity'):
@@ -397,7 +403,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         # By default, the directivity of the elements depends on the center
         # frequency only. This makes the algorithm faster. 
 
-    assert np.isscalar(isFFD) and isinstance(isFFD, bool) ,'OPTIONS.FullFrequencyDirectivity must be a logical scalar (true or false).'
+    assert backend.isscalar(isFFD) and isinstance(isFFD, bool) ,'OPTIONS.FullFrequencyDirectivity must be a logical scalar (true or false).'
 
     #%-- 3) Element splitting
     #%
@@ -409,16 +415,16 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #%---
     if utils.isfield(options,'ElementSplitting') and not options.ElementSplitting is None:
         M = int(options.ElementSplitting)
-        assert np.isscalar(M) and M==np.round(M) and M>0, 'OPTIONS.ElementSplitting must be a positive integer.'
+        assert backend.isscalar(M) and M==backend.round(M) and M>0, 'OPTIONS.ElementSplitting must be a positive integer.'
     else:
         LambdaMin = c/(fc*(1+param.bandwidth/200))
-        M = int(np.ceil(ElementWidth/LambdaMin))
+        M = int(backend.ceil(ElementWidth/LambdaMin))
 
     #%-- 4) Wait bar NOTE GB: this does not do nothing yet
     if not utils.isfield(options,'WaitBar'):
         options.WaitBar = True
 
-    assert np.isscalar(options.WaitBar) and utils.islogical(options.WaitBar), 'OPTIONS.WaitBar must be a logical scalar (true or false).'
+    assert backend.isscalar(options.WaitBar) and utils.islogical(options.WaitBar), 'OPTIONS.WaitBar must be a logical scalar (true or false).'
 
     #%-- Advanced (masked) options: Frequency step (scaling factor)
     #% The frequency step is determined automatically. It is tuned to avoid
@@ -429,11 +435,11 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     if not utils.isfield(options,'FrequencyStep'):
         options.FrequencyStep = 1
 
-    assert np.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
+    assert backend.isscalar(options.FrequencyStep) and utils.isnumeric(options.FrequencyStep) and options.FrequencyStep>0, 'OPTIONS.FrequencyStep must be a positive scalar.'
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = options.RC.astype(np.float32)
+        options.RC = options.RC.astype(backend.float32)
     
     #%------------------------------------%
     #% END of Check the OPTIONS structure %
@@ -458,7 +464,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         siz0 = (x.shape[0], 1)
     else:
         siz0 = x.shape
-    nx = np.prod(x.shape)
+    nx = backend.prod(x.shape)
 
     #%-- Coordinates of the points where pressure is needed
     x = x.reshape((-1,1), order = 'F')
@@ -466,9 +472,9 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     z = z.reshape((-1,1), order = 'F')
 
     if isMKMOVIE:
-        x = np.concatenate((x, np.array(options.x).reshape((-1,1))))
-        z = np.concatenate([z, np.array(options.z).reshape((-1,1))])
-        y = np.concatenate([y, np.zeros((len(options.x), 1))])
+        x = backend.concatenate((x, backend.array(options.x).reshape((-1,1))))
+        z = backend.concatenate([z, backend.array(options.z).reshape((-1,1))])
+        y = backend.concatenate([y, backend.zeros((len(options.x), 1))])
         #% Note with MKMOVIE:
         #% We must consider the points of the image grid + the points of the
         #% scatterers (if any). The scatterer coordinates are in options.x and
@@ -476,9 +482,9 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         #% Note: there is no elevation focusing with MKMOVIE (2-D only).
 
     #% cast x, y, and z to single class
-    x = x.astype(np.float32)
-    y = y.astype(np.float32)
-    z = z.astype(np.float32)
+    x = x.astype(backend.float32)
+    y = y.astype(backend.float32)
+    z = z.astype(backend.float32)
 
     xe, ze, THe, h = param.getElementPositions()
 
@@ -489,14 +495,14 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #% The values in xi,zi are in the range ]-ElementWidth/2 ElementWidth/2[
     #% (if M=1, then xi = zi = 0 for a rectilinear array).
     SegLength = ElementWidth/M
-    tmp = -ElementWidth/2 + SegLength/2 + np.arange(M)*SegLength
-    xi = tmp.reshape((1,1,M))*np.cos(THe)[:,:,np.newaxis]
-    zi = tmp.reshape((1,1,M))*np.sin(-THe)[:,:,np.newaxis]
+    tmp = -ElementWidth/2 + SegLength/2 + backend.arange(M)*SegLength
+    xi = tmp.reshape((1,1,M))*backend.cos(THe)[:,:,backend.newaxis]
+    zi = tmp.reshape((1,1,M))*backend.sin(-THe)[:,:,backend.newaxis]
     #%-- Out-of-field points
     #% Null pressure will be assigned to out-of-field points.
     isOUT = z<0
-    if np.isfinite(RadiusOfCurvature):
-        isOUT = np.logical_or(isOUT, (x**2+(z+h)**2) <=RadiusOfCurvature**2)
+    if backend.isfinite(RadiusOfCurvature):
+        isOUT = backend.logical_or(isOUT, (x**2+(z+h)**2) <=RadiusOfCurvature**2)
     
     #%-- Variables that we need:
     #%
@@ -509,7 +515,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     d2 = dxi**2+(z.reshape((-1,1,1))-zi-ze.reshape((1, -1, 1)))**2
 
     #%---
-    r = np.sqrt(d2+y.reshape((-1,1,1))**2).astype(np.float32)
+    r = backend.sqrt(d2+y.reshape((-1,1,1))**2).astype(backend.float32)
     #%---
     #% we'll have 1/sqrt(r) or 1/r:
     #% small d2 values are replaced by lambda/2
@@ -517,9 +523,9 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     smallD = (c/fc/2)
     r[r<smallD] = smallD
 
-    eps_sp = np.finfo(np.float32).eps
-    Th = np.arcsin((dxi +eps_sp)/(np.sqrt(d2)+eps_sp))-THe.reshape((1,-1,1))
-    sinT = np.sin(Th)
+    eps_sp = backend.finfo(backend.float32).eps
+    Th = backend.arcsin((dxi +eps_sp)/(backend.sqrt(d2)+eps_sp))-THe.reshape((1,-1,1))
+    sinT = backend.sin(Th)
     # clear dxi d2 Remove if needed for clear memory
     dxi, d2 = None, None # Clear memory if needed
 
@@ -553,21 +559,21 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         #% One has exp[-i(k r + w delay)] = exp[-2i pi(f r/c + f delay)] in the Eq.
         #% One wants: the phase increment 2pi(df r/c + df delay) be < 2pi.
         #% Therefore: df < 1/(r/c + delay).
-        df = 1/(np.max(r/c) + np.max(delaysTX))
+        df = 1/(backend.max(r/c) + backend.max(delaysTX))
         df = options.FrequencyStep*df
         #% note: df is here an upper bound; it will be recalculated below
         param.df = df
 
     #%-- FREQUENCY SAMPLES
-    Nf = int(2*np.ceil(param.fc/df)+1) # number of frequency samples
-    f = np.linspace(0,2*param.fc,Nf) # frequency samples
+    Nf = int(2*backend.ceil(param.fc/df)+1) # number of frequency samples
+    f = backend.linspace(0,2*param.fc,Nf) # frequency samples
     df = f[1]  #% update the frequency step
     #%- we keep the significant components only by using options.dBThresh
-    S = np.abs(pulseSpectrum(2*np.pi*f)*probeSpectrum(2*np.pi*f))
+    S = backend.abs(pulseSpectrum(2*backend.pi*f)*probeSpectrum(2*backend.pi*f))
 
-    GdB = 20*np.log10(1e-200 + S/np.max(S))# % gain in dB
-    id = np.where(GdB >options.dBThresh)
-    IDX = np.zeros(f.shape) != 0.
+    GdB = 20*backend.log10(1e-200 + S/backend.max(S))# % gain in dB
+    id = backend.where(GdB >options.dBThresh)
+    IDX = backend.zeros(f.shape) != 0.
     IDX[id[0][0]:id[0][-1]+1] = True
 
     f = f[IDX]
@@ -590,8 +596,8 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
          return [], [], IDX
 
     #%-- we need VECTORS
-    pulseSPECT = pulseSpectrum(2*np.pi*f) # pulse spectrum
-    probeSPECT = probeSpectrum(2*np.pi*f) # probe response
+    pulseSPECT = pulseSpectrum(2*backend.pi*f) # pulse spectrum
+    probeSPECT = probeSpectrum(2*backend.pi*f) # probe response
 
     #%--------------------------%
     #% end of FREQUENCY SPECTRA %
@@ -621,24 +627,24 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     RP = 0 # % RP = Radiation Pattern
     if isSIMUS:
         #%- For SIMUS only (we need the full spectrum of RX signals):
-        SPECT = np.zeros((nSampling, NumberOfElements), dtype = np.complex64)
+        SPECT = backend.zeros((nSampling, NumberOfElements), dtype = backend.complex64)
     else:
         #%- For MKMOVIE only (we need the full spectrum of the pressure field):
         #%- For using PFIELD alone we need the spectrum recieved on each point:
-        SPECT = np.zeros((nSampling, nx), dtype = np.complex64)
+        SPECT = backend.zeros((nSampling, nx), dtype = backend.complex64)
 
     #%-- Obliquity factor (baffle property)
     #%   An obliquity factor is required if the baffle is not rigid.
     #%   [Th = angle relative to the element normal axis]
     if NonRigidBaffle:
         if param.baffle == 'soft':
-            ObliFac = np.cos(Th)
+            ObliFac = backend.cos(Th)
         else: # % param.baffle is a scalar
-            ObliFac = np.cos(Th)/(np.cos(Th)+param.baffle)
+            ObliFac = backend.cos(Th)/(backend.cos(Th)+param.baffle)
     else: # % 1 if rigid baffle
-        ObliFac = np.ones(Th.shape, np.float32)
+        ObliFac = backend.ones(Th.shape, backend.float32)
 
-    ObliFac[np.abs(Th)>=np.pi/2] = utils.eps('single')
+    ObliFac[backend.abs(Th)>=backend.pi/2] = utils.eps('single')
 
 
     #%-- Note on Attenuation
@@ -651,13 +657,13 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #%   note: 20/log(10) ~ 8.69
 
    # %-- EXPONENTIAL arrays of size [numel(x) NumberOfElements M]
-    kw = 2*np.pi*f[0]/c # % wavenumber
+    kw = 2*backend.pi*f[0]/c # % wavenumber
     kwa = alpha_dB/8.69*f[0]/1e6*1e2 # % attenuation-based wavenumber
-    EXP = np.exp(-kwa*r + 1j*np.mod(kw*r,2*np.pi)).astype(np.complex64) #; % faster than exp(-kwa*r+1j*kw*r)
+    EXP = backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)).astype(backend.complex64) #; % faster than exp(-kwa*r+1j*kw*r)
     #%-- Exponential array for the increment wavenumber dk
-    dkw = 2*np.pi*df/c
+    dkw = 2*backend.pi*df/c
     dkwa = alpha_dB/8.69*df/1e6*1e2
-    EXPdf = np.exp((-dkwa + 1j*dkw)*r).astype(np.complex64)
+    EXPdf = backend.exp((-dkwa + 1j*dkw)*r).astype(backend.complex64)
 
     #%-- We replace EXP by EXP.*ObliFac./r or EXP.*ObliFac./sqrt(r)
 
@@ -665,7 +671,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         EXP = EXP*ObliFac/r
         rm = average_over_last_axis(r); 
     else:
-        EXP = EXP*ObliFac/np.sqrt(r)
+        EXP = EXP*ObliFac/backend.sqrt(r)
 
     #clear ObliFac r
 
@@ -678,13 +684,13 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #%   backscattered echoes. We thus need the distances between the scatterers
     #%   and grid-points, and the corresponding EXP_RC matrix.
     if isMKMOVIE and options.RC is not None:
-        dx = x[:nx].reshape((-1,1))-np.array(options.x).reshape((1, -1))
-        dz = z[:nx].reshape((-1,1))-np.array(options.z).reshape((1,-1))
-        r_RC = np.sqrt(dx**2 + dz**2)
+        dx = x[:nx].reshape((-1,1))-backend.array(options.x).reshape((1, -1))
+        dz = z[:nx].reshape((-1,1))-backend.array(options.z).reshape((1,-1))
+        r_RC = backend.sqrt(dx**2 + dz**2)
         
         #% EXP_RC = exp((-kwa+1i*kw)*r_RC);
-        EXP_RC = np.exp(-kwa*r_RC + 1j*np.mod(kw*r_RC,2*np.pi)).astype(np.complex64)
-        EXPdf_RC = np.exp((-dkwa + 1j*dkw)*r_RC).astype(np.complex64)
+        EXP_RC = backend.exp(-kwa*r_RC + 1j*backend.mod(kw*r_RC,2*backend.pi)).astype(backend.complex64)
+        EXPdf_RC = backend.exp((-dkwa + 1j*dkw)*r_RC).astype(backend.complex64)
 
     #%-- Simplified directivity (if not dependent on frequency)
     #% In the "simplified directivity" version, the directivity of the elements
@@ -693,7 +699,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #% DIR is included in the variable EXP to reduce storage.
 
     if not isFFD:
-        kc = 2*np.pi*fc/c # % center wavenumber
+        kc = 2*backend.pi*fc/c # % center wavenumber
         DIR = mysinc(kc*SegLength/2*sinT) # % directivity of each segment
         EXP = EXP*DIR #
         #clear DIR
@@ -710,10 +716,10 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         #       a good compromise.
         alpha = 1j/2*(1/Rf-1/rm)
         gamma = 1j*y**2/2/rm
-        beta2 = (-(y/rm)**2).astype(np.complex128)
+        beta2 = (-(y/rm)**2).astype(backend.complex128)
         #clear rm
-        Nmgbm = max(3,int(np.round(nSampling/20)))
-        k4mgbm = np.round(np.linspace(1,nSampling,Nmgbm))
+        Nmgbm = max(3,int(backend.round(nSampling/20)))
+        k4mgbm = backend.round(backend.linspace(1,nSampling,Nmgbm))
         #% (the MGBM field won't be calculated at each step)
 
 
@@ -721,12 +727,12 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #%-----------------------------%
     #% SUMMATION OVER THE SPECTRUM %
     #%-----------------------------%
-    EXP = EXP.astype(np.complex64)
+    EXP = EXP.astype(backend.complex64)
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
 
     for k  in range(nSampling):
 
-        kw = 2*np.pi*f[k]/c #; % wavenumber
+        kw = 2*backend.pi*f[k]/c #; % wavenumber
         
         #%--- MGBM = multi-Gaussian beam model
         #% The MGBM is used to simulate the focused beams in the elevation
@@ -734,14 +740,14 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         if ElevationFocusing and (k + 1) in k4mgbm:
             #% (the MGBM field is not recalculated at each step)
             MGBM = 0
-            if all(np.abs(y)<utils.eps('single')):
+            if all(backend.abs(y)<utils.eps('single')):
                 for n,_ in enumerate(A):
-                    MGBM = MGBM + A[n]*np.sqrt(np.pi/(kw*alpha + B[n]/ElementHeight**2))
+                    MGBM = MGBM + A[n]*backend.sqrt(backend.pi/(kw*alpha + B[n]/ElementHeight**2))
 
             else:
                 for n,_ in enumerate(A):
                     tmp = 1/(kw*alpha + B[n]/ElementHeight**2)
-                    MGBM = MGBM + A[n]*np.sqrt(np.pi*tmp)* np.exp(kw**2*beta2/4*tmp + kw*gamma)
+                    MGBM = MGBM + A[n]*backend.sqrt(backend.pi*tmp)* backend.exp(kw**2*beta2/4*tmp + kw*gamma)
                 
             
         
@@ -792,7 +798,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
         #% use of SUM: summation over the number of delay series (e.g. MLT)
         #GB WARNING,  HERE delays are a row vector instead of a column as in matlab
 
-        DELAPOD = np.sum(np.exp(1j*kw*c*delaysTX), 0) *APOD
+        DELAPOD = backend.sum(backend.exp(1j*kw*c*delaysTX), 0) *APOD
         
         #%-- Summing the radiation patterns generating by all the elements
         RPk = RPmono@DELAPOD.reshape((-1, 1))
@@ -819,10 +825,10 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
                 #; % *f(k)^2/fc^2; % Rayleigh scattering (OPTIONAL)
 
 
-            if np.any(param.RXdelay != 0): # % reception delays, if any
-                SPECT[k,:] = SPECT[k,:] *np.exp(1j*kw*c*param.RXdelay)
+            if backend.any(param.RXdelay != 0): # % reception delays, if any
+                SPECT[k,:] = SPECT[k,:] *backend.exp(1j*kw*c*param.RXdelay)
         else:  #% using PFIELD alone
-            RP = RP + abs(RPk)**2; #% acoustic intensity
+            RP = RP + backend.abs(RPk)**2; #% acoustic intensity
 
             SPECT[k,:] = RPk.flatten(order = 'F')
         
@@ -850,7 +856,7 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
     #if options.WaitBar, close(hwb), end
 
     #% Correcting factor (including integration step, df)
-    if np.isinf(NoW):
+    if backend.isinf(NoW):
         CorFac = 1
     else:
         CorFac = df
@@ -863,37 +869,38 @@ def pfield(x: np.ndarray, y: np.ndarray, z: np.ndarray, delaysTX: np.ndarray, pa
 
     #% RMS acoustic pressure (if we are in PFIELD only)
     if not (isSIMUS or isMKMOVIE):
-        RP =np.sqrt(RP).reshape(siz0, order = 'F')
-        SPECT = np.swapaxes(SPECT, 0, 1)
+        RP =backend.sqrt(RP).reshape(siz0, order = 'F')
+        SPECT = backend.swapaxes(SPECT, 0, 1)
         SPECT = SPECT.reshape([siz0[0], siz0[1], nSampling], order = 'F')
     return RP, SPECT, IDX
 
 
 def MGBMcoeff(n):
 # Coefficients for the Multi-Gaussian beam models
+    backend = get_backend()
     if n == 1:
         A = [1.186]
         B = [3.92]
     elif n == 2:
         A = 0.452 - 0.875
         B = 5.021 - 6.61j
-        A = [A, np.conj(A)]
-        B = [B, np.conj(B)]
+        A = [A, backend.conj(A)]
+        B = [B, backend.conj(B)]
     elif n == 3:
         A = -0.538 - 0.104j
         B = 4.81 - 15.506j
-        A = [2.141,  A, np.conj(A)]
-        B = [8.03,  B,  np.conj(B)]
+        A = [2.141,  A, backend.conj(A)]
+        B = [8.03,  B,  backend.conj(B)]
     elif n == 4:
         A = [0.187 + 0.275j , 0.288 - 1.954j]
         B = [4.558 - 25.59j , 8.598 - 7.924j]
-        A = np.concatenate([A, np.conj(A)])
-        B = np.concatenate([B, np.conj(B)])
+        A = backend.concatenate([A, backend.conj(A)])
+        B = backend.concatenate([B, backend.conj(B)])
     elif n == 5:
         A = [0.057 - 0.292j, -1.79 + 0.385j]
         B = [5.078 - 34.993j, 9.982 - 16.61j]
-        A = [4.509, A, np.conj(A)]
-        B = [12.404, B, np.conj(B)]
+        A = [4.509, A, backend.conj(A)]
+        B = [12.404, B, backend.conj(B)]
     elif n == 10:
         #% Wen JJ, Breazeale MA. A diffraction beam field expressed as the
         #% superposition of Gaussian beams. The Journal of the Acoustical
@@ -902,7 +909,7 @@ def MGBMcoeff(n):
             1.6576 + 2.7015j , -5.0418 + 3.2488j , 1.1227 - 0.6885j,
             -1.0106 - 0.2696j , -2.5974 + 3.2202j , -0.1484 - 0.3119j, 
             -0.2085 - 0.2385j]
-        B = 4*np.array([4.0697 + 0.2273j , 1.1531 - 20.9330j , 4.4608 + 5.1268j,
+        B = 4*backend.array([4.0697 + 0.2273j , 1.1531 - 20.9330j , 4.4608 + 5.1268j,
             4.3521 + 14.9970j , 4.5443 + 10.0030j , 3.8478 + 20.0780j,
             2.5280 - 10.3100j , 3.3197 - 4.8008j , 1.9002 - 15.8200j,
             2.6340 + 25.0090j])
@@ -913,10 +920,10 @@ def MGBMcoeff(n):
         #% May;123(5):3516.
         A = [-0.0366 + 0.0698j , -0.2880 - 0.1072j , 0.0463 - 0.8593j ,
             2.4278 - 0.4273j, -1.6515 + 6.9321j]
-        A = np.concatenate([A, np.conj(A[-1::-1])])
+        A = backend.concatenate([A, backend.conj(A[-1::-1])])
         B = [0.9568 + 22.0499j , 1.8966 + 17.3281j , 2.5687 + 12.2845j ,
             3.1522 + 7.1375j , 3.7397 + 2.2497j]
-        B = 4*np.concatenate([B, np.conj(B[-1::-1])])
+        B = 4*backend.concatenate([B, backend.conj(B[-1::-1])])
     elif n== 15:
         #% Liu W, Ji P, Yang J. Development of a simple and accurate
         #% approximation method for the Gaussian beam expansion technique.
@@ -925,11 +932,11 @@ def MGBMcoeff(n):
         A = [-0.0647 - 0.0042j , 0.0334 - 0.2398j , 0.5113 - 0.0972j,
             0.5858 + 0.7912j , -0.6908 + 1.5627j , -3.0363 + 0.5081j,
             -3.6501 - 6.3857j , 13.6222]
-        A = np.concatenate([A, np.conj(A[-1::-1])])
+        A = backend.concatenate([A, backend.conj(A[-1::-1])])
         B = [1.2100 + 35.6867j, 2.3108 + 31.3481j, 2.8161 + 26.2901j,
             3.2223 + 21.1344j, 3.4860 + 15.8696j, 3.6537 + 10.4523j,
             4.0206 + 5.0002j, 4.3552]
-        B = 4*np.concatenate([B, np.conj(B[-1::-1])])
+        B = 4*backend.concatenate([B, backend.conj(B[-1::-1])])
     elif n == 25:
         #% Liu W, Ji P, Yang J. Development of a simple and accurate
         #% approximation method for the Gaussian beam expansion technique.
@@ -940,13 +947,13 @@ def MGBMcoeff(n):
             0.9359 + 0.8547j , 0.2283 + 1.7047j , -1.2466 + 2.0209j , 
             -3.1897 + 1.1364j , -5.3844 - 1.7978j , -3.2923 - 12.5813j , 
             22.7593]
-        A = np.concatenate([A, np.conj(A[-1::-1])])
+        A = backend.concatenate([A, backend.conj(A[-1::-1])])
         B = [2.7353 + 64.7628j , 2.4159 + 60.8489j , 3.0518 + 55.6123j , 
             3.3108 + 50.1677j , 3.5307 + 44.6995j , 3.7217 + 39.1628j , 
             3.8727 + 33.5837j , 3.9930 + 27.9784j , 4.0952 + 22.3454j , 
             4.1578 + 16.6841j , 4.2756 + 10.9041j , 4.6409 + 5.2178j , 
             4.9426]
-        B = 4*np.concatenate([B, np.conj(B[-1::-1])])
+        B = 4*backend.concatenate([B, backend.conj(B[-1::-1])])
     else:
         raise ValueError()
     

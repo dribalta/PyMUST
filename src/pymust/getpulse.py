@@ -1,8 +1,8 @@
 from __future__ import annotations
-import numpy as np
+from .backend import get_backend
 from . import utils
 
-def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: float = 1e-09) -> tuple[np.ndarray, np.ndarray]:
+def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: float = 1e-09):
     #GETPULSE   Get the transmit pulse
 #   PULSE = GETPULSE(PARAM,WAY) returns the one-way or two-way transmit
 #   pulse with a time sampling of 1 nanosecond. Use WAY = 1 to get the
@@ -87,14 +87,15 @@ def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: flo
     
     NoW = param.TXnow
     
-    assert np.isscalar(NoW) and utils.isnumeric(NoW) and NoW > 0,'PARAM.TXnow must be a positive scalar.'
+    backend = get_backend()
+    assert backend.isscalar(NoW) and utils.isnumeric(NoW) and NoW > 0,'PARAM.TXnow must be a positive scalar.'
 
     #-- TX pulse: Frequency sweep for a linear chirp
-    if not 'TXfreqsweep' in param or param.TXfreqsweep is None or np.isinf(param.TXfreqsweep):
+    if not 'TXfreqsweep' in param or param.TXfreqsweep is None or backend.isinf(param.TXfreqsweep):
         param.TXfreqsweep = None
     
     FreqSweep = param.TXfreqsweep
-    assert FreqSweep is None or (np.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep > 0),'PARAM.TXfreqsweep must be None (windowed sine) or a positive scalar (linear chirp).'
+    assert FreqSweep is None or (backend.isscalar(FreqSweep) and utils.isnumeric(FreqSweep) and FreqSweep > 0),'PARAM.TXfreqsweep must be None (windowed sine) or a positive scalar (linear chirp).'
     
     pulseSpectrum = param.getPulseSpectrumFunction(FreqSweep)
     
@@ -109,11 +110,11 @@ def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: flo
     df = param.fc / param.TXnow / 32
     p = utils.nextpow2(1 / dt / 2 / df)
     Nf = 2 ** p
-    f = np.linspace(0,1 / dt / 2,Nf)
+    f = backend.linspace(0,1 / dt / 2,Nf)
     #-- spectrum of the pulse
-    F = np.multiply(pulseSpectrum(2 * np.pi * f),probeSpectrum(2 * np.pi * f) ** way)
+    F = backend.multiply(pulseSpectrum(2 * backend.pi * f),probeSpectrum(2 * backend.pi * f) ** way)
     if  PreVel.lower() in ['vel2d','velocity2d']:
-        F = F / (np.sqrt(f) + eps)
+        F = F / (backend.sqrt(f) + eps)
     elif PreVel.lower() in ['vel3d','velocity3d']:
             F = F / (f + eps)
 
@@ -122,20 +123,20 @@ def getpulse(param: utils.Param, way: int = 2, PreVel: str = 'pressure', dt: flo
     # Fc = np.trapz(f*P) / np.trapz(P)
     # f = f + Fc - fc
 
-    F = np.multiply(pulseSpectrum(2 * np.pi * f),probeSpectrum(2 * np.pi * f) ** way)
+    F = backend.multiply(pulseSpectrum(2 * backend.pi * f),probeSpectrum(2 * backend.pi * f) ** way)
     
     #-- pulse in the temporal domain (step = 1 ns)
-    pulse = np.fft.fftshift(np.fft.irfft(F))
-    pulse = pulse / np.max(np.abs(pulse))
+    pulse = backend.fft_fftshift(backend.fft_irfft(F))
+    pulse = pulse / backend.max(backend.abs(pulse))
     #-- keep the significant magnitudes
-    idx, = np.where(pulse > (1 / 1023))
+    idx, = backend.where(pulse > (1 / 1023))
     idx1 = idx[0]
     idx2 = idx[-1]
     idx = min(idx1 + 1, 2 * Nf - 1 - idx2-1)
     #pulse = pulse[np.arange(end() - idx + 1,idx+- 1,- 1)
     pulse = pulse[-idx: idx-2:-1]
     #-- time vector
-    t = np.arange(len(pulse)) *dt
+    t = backend.arange(len(pulse)) *dt
     return pulse,t
     
     

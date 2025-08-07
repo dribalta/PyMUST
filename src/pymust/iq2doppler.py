@@ -1,7 +1,8 @@
 from __future__ import annotations
-import numpy as np,scipy, scipy.signal, typing
+import scipy, scipy.signal, typing
+from .backend import get_backend
 from . import utils
-def iq2doppler(IQ: np.ndarray, param: utils.Param, M: typing.Union[int,np.ndarray] = 1, lag: int = 1) -> tuple[np.ndarray, np.ndarray]:
+def iq2doppler(IQ, param: utils.Param, M: typing.Union[int] = 1, lag: int = 1):
     """
     %IQ2DOPPLER   Convert I/Q data to color Doppler
     %   VD = IQ2DOPPLER(IQ,PARAM) returns the Doppler velocities from the I/Q
@@ -56,10 +57,11 @@ def iq2doppler(IQ: np.ndarray, param: utils.Param, M: typing.Union[int,np.ndarra
     %   href="matlab:web('https://www.biomecardio.com')">www.BiomeCardio.com</a>
     """
 
+    backend = get_backend()
     if isinstance(M, int):
-        M = M *np.ones(2, dtype = int)
+        M = M * backend.ones(2, dtype=backend.int)
 
-    assert np.all(M>0) and M.dtype == int, 'M must contain integers >0'
+    assert backend.all(M>0) and M.dtype == backend.int, 'M must contain integers >0'
     #%-
     if len(IQ.shape)==4:
         raise ValueError('IQ is a 4-D array: use IQ2DOPPLER3.')
@@ -100,23 +102,23 @@ def iq2doppler(IQ: np.ndarray, param: utils.Param, M: typing.Union[int,np.ndarra
     IQ1 = IQ[:,:,: -lag]
     IQ2 = IQ[:,:,lag:]
 
-    AC = np.sum(IQ1*np.conj(IQ2),2)  # ensemble auto-correlation
+    AC = backend.sum(IQ1*backend.conj(IQ2),2)  # ensemble auto-correlation
 
     if  M[0] != 1 or M[1] != 1: #isequal([M(1) M(2)],[1 1]) % spatial weighted average
         h = scipy.signal.windows.hamming(M[0]).reshape((-1, 1))*scipy.signal.windows.hamming(M[1]).reshape((1, -1))
         AC = scipy.signal.convolve2d(AC,h, 'same', boundary='symmetric')
 
     #%-- Doppler velocity
-    VN = c*PRF/4/fc/lag; #% Nyquist velocity
-    vel = -VN*(np.angle(AC))/np.pi; 
+    VN = c*PRF/4/fc/lag  # Nyquist velocity
+    vel = -VN*(backend.angle(AC))/backend.pi 
 
 
     #%-- Doppler variance
-    P = np.sum((IQ.real)**2+(IQ.imag)**2,2) #% power
-    if  M[0] != 1 or M[1] != 1: # % spatial weighted average
+    P = backend.sum((backend.real(IQ))**2+(backend.imag(IQ))**2,2)  # power
+    if  M[0] != 1 or M[1] != 1:  # spatial weighted average
         P = scipy.signal.convolve2d(P,h, 'same', boundary='symmetric')
 
-    variance = 2*(VN/np.pi)**2*(1-np.abs(AC)/P)
+    variance = 2*(VN/backend.pi)**2*(1-backend.abs(AC)/P)
     #%-- cf. Eq. 7.48 in Estimation of Blood Velocities Using Ultrasound:
     #%   A Signal Processing Approach by Jørgen Arendt Jensen,
     #%   Cambridge University Press, 1996

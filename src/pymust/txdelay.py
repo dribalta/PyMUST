@@ -1,13 +1,13 @@
 from . import utils
-import numpy as np
+from .backend import get_backend
 
-def txdelayCircular(param: utils.Param, tilt: float, width: float) -> np.ndarray:
+def txdelayCircular(param: utils.Param, tilt: float, width: float):
     return txdelay(param, tilt, width)
 
-def txdelayPlane(param: utils.Param, tilt: float) -> np.ndarray:
+def txdelayPlane(param: utils.Param, tilt: float):
     return txdelay(param, tilt)
 
-def txdelayFocused(param: utils.Param, x: float, y: float) -> np.ndarray:
+def txdelayFocused(param: utils.Param, x: float, y: float):
     return txdelay(x, y, param)
 
 def txdelay(*args):
@@ -160,11 +160,12 @@ def txdelay(*args):
 
     #%-- Radius of curvature (in m)
     #% for a convex array
+    backend = get_backend()
     if not utils.isfield(param,'radius'):
-        param.radius = np.inf # % default = linear array
+        param.radius = backend.inf # % default = linear array
 
     R = param.radius
-    isLINEAR = np.isinf(R)
+    isLINEAR = backend.isinf(R)
 
 
 
@@ -173,60 +174,61 @@ def txdelay(*args):
     x, z, THe, h= param.getElementPositions()
 
     if option == 'Plane Wave':
-        tilt = np.array(args[1]).reshape((-1, 1)) # Check if it is not a vector
-        assert np.all(np.abs(tilt)<np.pi/2), 'The tilt angles must verify |tilt| < pi/2'
+        tilt = backend.array(args[1]).reshape((-1, 1)) # Check if it is not a vector
+        assert backend.all(backend.abs(tilt)<backend.pi/2), 'The tilt angles must verify |tilt| < pi/2'
         if isLINEAR:
-            delays = x*np.sin(tilt)/c
+            delays = x*backend.sin(tilt)/c
         else:
             #% we have a CONVEX ARRAY
             
             #% intersection point between the wavefront and the transducer
-            xn = R*np.sin(tilt)
-            zn = R*np.cos(tilt)-h
+            xn = R*backend.sin(tilt)
+            zn = R*backend.cos(tilt)-h
 
             #% Note:
             #% Equation of the line tangent to the transducer at (xn,zn):
             #% X = -xn/(zn+h)*(X-xn) + zn
             
             #% distances between this line and the elements (x,z)
-            d = np.abs(z+xn/(zn+h)*x-xn**2/(zn+h)-zn)/ \
-                np.sqrt(1+xn**2/(zn+h)**2)
+            d = backend.abs(z+xn/(zn+h)*x-xn**2/(zn+h)-zn)/ \
+                backend.sqrt(1+xn**2/(zn+h)**2)
             delays = -d/c
     #%-----
     elif option == 'Origo':
-        x0 = np.array(args[0]).reshape((-1, 1))
-        z0 = np.array(args[1]).reshape((-1, 1))
+        x0 = backend.array(args[0]).reshape((-1, 1))
+        z0 = backend.array(args[1]).reshape((-1, 1))
         assert x0.shape == z0.shape, 'X0 and Z0 must have the same length.'
-        delays = np.sqrt((x-x0)**2 + (z-z0)**2)/c
+        delays = backend.sqrt((x-x0)**2 + (z-z0)**2)/c
         if isLINEAR:
-            delays = -delays*np.sign(z0)
-        elif np.sqrt(x0**2 + (R-z0)**2)<R:
+            delays = -delays*backend.sign(z0)
+        elif backend.sqrt(x0**2 + (R-z0)**2)<R:
             delays = -delays
     #%-----
     elif option == 'Circular Wave':
         assert isLINEAR,'The syntax "TXDELAY(PARAM,TILT,WIDTH)" is not available for a convex array.'
-        tilt = np.array(args[1]).reshape((-1, 1))
-        width = np.array(args[2]).reshape((-1, 1))
+        tilt = backend.array(args[1]).reshape((-1, 1))
+        width = backend.array(args[2]).reshape((-1, 1))
         assert tilt.shape == width.shape, 'TILT and WIDTH must have the same length.'
-        assert np.all(np.logical_and(width>0, width<np.pi)), 'The width angles must verify width > 0 and width < pi'
+        assert backend.all(backend.logical_and(width>0, width<backend.pi)), 'The width angles must verify width > 0 and width < pi'
         L = (N-1)*param.pitch
         #%-- Origo
         x0,z0 = angles2origo(L,tilt,width)
         #%--
-        delays = np.sqrt((x-x0)**2 + z0**2)/c
-        delays = -delays*np.sign(z0)
-    delays = delays-np.min(delays,-1).reshape((-1, 1))
+        delays = backend.sqrt((x-x0)**2 + z0**2)/c
+        delays = -delays*backend.sign(z0)
+    delays = delays-backend.min(delays,-1).reshape((-1, 1))
 
     param.TXdelay = delays
     return delays
 
 def angles2origo(L,tilt,width):
     #% Origo (virtual source) from the tilt and width angles
-    tilt = np.mod(-tilt+np.pi/2,2*np.pi)-np.pi/2
-    SignCorrection = np.ones(tilt.shape)
-    idx = np.abs(tilt)>np.pi/2
-    tilt[idx] = np.pi-tilt[idx]
+    backend = get_backend()
+    tilt = backend.mod(-tilt+backend.pi/2,2*backend.pi)-backend.pi/2
+    SignCorrection = backend.ones(tilt.shape)
+    idx = backend.abs(tilt)>backend.pi/2
+    tilt[idx] = backend.pi-tilt[idx]
     SignCorrection[idx] = -1
-    z0 = SignCorrection*L/(np.tan(tilt-width/2)-np.tan(tilt+width/2))
-    x0 = SignCorrection*z0*np.tan(width/2-tilt)+L/2
+    z0 = SignCorrection*L/(backend.tan(tilt-width/2)-backend.tan(tilt+width/2))
+    x0 = SignCorrection*z0*backend.tan(width/2-tilt)+L/2
     return x0, z0

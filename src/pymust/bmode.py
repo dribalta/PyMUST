@@ -1,6 +1,6 @@
-import numpy as np
+from .backend import get_backend
 from . import utils
-def bmode(IQ: np.ndarray, DR: float = 40) -> np.ndarray:
+def bmode(IQ, DR: float = 40):
 
     """
     %BMODE   B-mode image from I/Q signals
@@ -50,18 +50,19 @@ def bmode(IQ: np.ndarray, DR: float = 40) -> np.ndarray:
     %   website: <a
     %   href="matlab:web('https://www.biomecardio.com')">www.BiomeCardio.com</a>
     """
+    backend = get_backend()
     assert utils.iscomplex(IQ),'IQ must be a complex array'
 
-    I = np.abs(IQ) # real envelope
+    I = backend.abs(IQ)  # real envelope
 
     if (DR >= 1):
-        I = 20*np.log10(I/np.max(I))+DR
-        I = (255*I/DR) #.astype(np.uint8) # 8-bit log-compressed image
+        I = 20*backend.log10(I/backend.max(I))+DR
+        I = (255*I/DR)  # 8-bit log-compressed image
     else:    
-        I = np.power(I / np.max(I), DR)
+        I = backend.power(I / backend.max(I), DR)
         I *= 255
 
     I[I<0] = 0
     I[I>255] = 255
 
-    return I.astype(np.uint8)
+    return backend.astype(I, backend.uint8)

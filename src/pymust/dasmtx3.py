@@ -1,9 +1,9 @@
 from __future__ import annotations
-import numpy as np
 import scipy, scipy.interpolate
+from .backend import get_backend
 from . import  utils
 
-def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varargin) -> scipy.sparse.spmatrix:
+def dasmtx3(SIG, x, y, z, *varargin):
     """
     DASMTX3   Delay-and-sum matrix for 3-D imaging with a matrix array
     M = DASMTX3(SIG,X,Y,Z,DELAYS,PARAM) returns the numel(X)-by-numel(SIG)
@@ -135,9 +135,10 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
     assert NArg<4,'Too many input arguments.'
     # assert(nargout<3,'Too many output arguments.')
 
+    backend = get_backend()
     assert x.shape == y.shape == z.shape,'X, Y and Z must of same size.'
-    if  np.prod(SIG.shape) in [2, 3]:
-        SIG = SIG.flatten()
+    if  backend.prod(SIG.shape) in [2, 3]:
+        SIG = backend.flatten(SIG)
         nl = int(abs(SIG[0]))
         nc = int(abs(SIG[1]))
     else:
@@ -171,7 +172,7 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
         param.ignoreCaseInFieldNames()
 
         if utils.isfield(param,'TXdelay'): # DASMTX3(SIG,x,y,z,delaysTX,param)
-            assert np.allclose(delaysTX.flatten(), param.TXdelay.flatten()),'If both specified, PARAM.TXdelay and DELAYS must be equal.'
+            assert backend.allclose(backend.flatten(delaysTX), backend.flatten(param.TXdelay)),'If both specified, PARAM.TXdelay and DELAYS must be equal.'
 
 
     #-- Interpolation method
@@ -190,18 +191,18 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
 
     #-- f-number
     if not utils.isfield(param,'fnumber'):
-        param.fnumber = np.array([0, 0]) # f-number (default = full aperture)
-    elif not isinstance(param.fnumber,np.ndarray) and param.fnumber == 0:
-        param.fnumber = np.array([0, 0])
+        param.fnumber = backend.array([0, 0])  # f-number (default = full aperture)
+    elif not hasattr(param.fnumber, 'shape') and param.fnumber == 0:
+        param.fnumber = backend.array([0, 0])
     elif param.get('fnumber', 'None') is not None:
-        param.fnumber = np.array(param.fnumber) # DR : convert to numpy array
+        param.fnumber = backend.array(param.fnumber)  # DR : convert to array
         assert param.fnumber.shape == (2,), 'PARAM.fnumber must contain two elements.'
         assert utils.isnumeric(param.fnumber), 'PARAM.fnumber must be a scalar.'
         assert (param.fnumber>=0).all(), 'PARAM.fnumber must be non-negative.'
 
     #-- Acquisition start time (in s)
     if not utils.isfield(param,'t0'):
-        param.t0 = np.zeros((1,1)) # acquisition start time in s
+        param.t0 = backend.zeros((1,1))  # acquisition start time in s
     
     #-- Element width (in m)
     if not utils.isfield(param,'width'):
@@ -216,9 +217,9 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
     #-- Radius of curvature (in m)
     # for a convex array
     if not utils.isfield(param,'radius'):
-        param.radius = np.inf # default = linear array
+        param.radius = backend.inf  # default = linear array
     else:
-        assert np.isinf(param.radius), 'DASMTX3 does not address matrix convex arrays.'
+        assert backend.isinf(param.radius), 'DASMTX3 does not address matrix convex arrays.'
 
     #-- Reception angle (in rad) -- [option not available in DASMTX3] --
     if not utils.isfield(param,'RXangle'):
@@ -251,7 +252,7 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
     if param.elements.shape[0] == 3:
         ze = param.elements[2, :]
     else:
-        ze = np.zeros_like(xe)
+        ze = backend.zeros_like(xe)
 
     #-- Number of elements
     if delaysTX.shape[0] == nc and delaysTX.shape[1] != nc:
@@ -276,7 +277,7 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
         else:
             raise ValueError('A center frequency (PARAM.fc) is required with I/Q data.')
         
-        wc = 2*np.pi*param.fc
+        wc = 2*backend.pi*param.fc
 
 
     #%-------------------------------%
@@ -311,17 +312,17 @@ def dasmtx3(SIG: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray, *varar
     # The f-number is determined from the element directivity
     # See the paper "So you think you can DAS?"
     if param.get('fnumber', None) is None:
-        param.fnumber = np.array([0, 0], dtype=np.float32) # Initialize f-number
+        param.fnumber = backend.array([0, 0], dtype=backend.float32)  # Initialize f-number
         lambdaMIN = c/(param.fc*(1+param.bandwidth/200))
         RXa = abs(param.RXangle)
         # Note: in Matlab, sinc(x) = sin(pi*x)/(pi*x)
-        f = lambda th,width= ElementWidth,l= lambdaMIN: np.abs(np.cos(th+RXa)*np.sinc(width/l*np.sin(th+RXa))-0.71)
-        xx = scipy.optimize.fminbound(f,0,np.pi/2-RXa,xtol= np.pi/100)
+        f = lambda th,width= ElementWidth,l= lambdaMIN: backend.abs(backend.cos(th+RXa)*backend.sinc(width/l*backend.sin(th+RXa))-0.71)
+        xx = scipy.optimize.fminbound(f,0,backend.pi/2-RXa,xtol= backend.pi/100)
         alpha = xx
-        param.fnumber[0] = 1/2/np.tan(alpha)
-        xx = scipy.optimize.fminbound(f,0,np.pi/2-RXa,xtol= np.pi/100,args=(ElementHeight,)) # Calculate 2nd f-number based on ElementHeight
+        param.fnumber[0] = 1/2/backend.tan(alpha)
+        xx = scipy.optimize.fminbound(f,0,backend.pi/2-RXa,xtol= backend.pi/100,args=(ElementHeight,))  # Calculate 2nd f-number based on ElementHeight
         alpha = xx
-        param.fnumber[1] = 1/2/np.tan(alpha)
+        param.fnumber[1] = 1/2/backend.tan(alpha)
 
     fNum = param.fnumber
 
