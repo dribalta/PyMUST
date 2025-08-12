@@ -2,7 +2,6 @@ import numpy as np
 from . import utils
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 
 # Ugly optimisation trick, of loop unraveling, as np.mean/np.sum has a large overhead for iterating over few dimesions
 # for i in range(1, 10):

@@ -11,8 +11,10 @@ from .. import pfield as linear_pfield
 from .. import pfield3
 # 
 
+import logging
+
 def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
-        param: utils.Param, options: utils.Options = None, * ,
+        param: utils.Param, options: utils.Options = None, 
         doublePrecision: bool = False, debug: bool = False,
         reducedKernel: bool = False, DR: int = 30,
         auxiliary_returns: Iterable[str] = None, is3D = False):
@@ -73,12 +75,7 @@ def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
         Ny = np.ceil(2*range_matlab(ybound)/min(c/fs))
         Ny = round(Ny / 2) * 2 + 1
 
-    if debug:
-        print("DEBUG - Number of grid points in x:", Nx)
-        print("DEBUG - of grid points in z:", Nz)
-        if is3D:
-            print("DEBUG - of grid points in y:", Ny)
-
+    logging.debug(f"DEBUG - Number of grid points in x: {Nx}, in z: {Nz}" + ' ' + (f"in y: {Ny}" if is3D else ""))
 
     # TODO precompute the needed RAM and check if it is too large
 
@@ -121,8 +118,7 @@ def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
         P0, P0_SPECT, linear_IDX = linear_pfield(X,None, Z,delaysTX,param,options=options if options else None)
     if "P0" not in auxiliary_returns: del P0  # Free memory if not needed
 
-    if debug:
-        print ("DEBUG - Finished computing P0")
+    logging.debug ("DEBUG - Finished computing P0")
 
 
     # Adjust complex precision using dtype_complex
@@ -157,16 +153,14 @@ def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
     # D_kernel += np.sqrt(D_kernel**2 + (Y-Y.mean() + dy/2)**2) # 3D distance kernel
     P1_SPECT = np.zeros_like(P02_SPECT_compact, dtype=dtype_complex)
 
-    if debug:
-        print ("DEBUG - Number of frequencies after filtering:", len(fs))
+    logging.debug(f"DEBUG - Number of frequencies after filtering: {len(fs)}")
 
     pixel_size = dx * dz
     if is3D:
         pixel_size *= dy
 
     for k, w  in enumerate(ws_P02): # NOTE Could be parallelized
-        if debug:
-            print (f"New itertion {k}/{len(ws_P02)}, angular freq = {w}")
+        logging.debug (f"New itertion {k}/{len(ws_P02)}, angular freq = {w}")
 
         if reducedKernel and not is3D:
             nPointsKeep = DR/(param.attenuation * dx *fs[k]/1e4) # dx is in m, fs is in Hz, attenuation is in dB/cm/MHz
@@ -204,7 +198,6 @@ def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
 
     if is3D:
         # If 3D, we need to compute the norm across the last three axes
-        print(P1_SPECT.shape)
         norm = np.linalg.norm(P1_SPECT.reshape((-1, P1_SPECT.shape[-1])), axis = 0)
     else:
         norm = np.linalg.norm(P1_SPECT, axis = (0, 1))

@@ -159,7 +159,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray, x_
         kwa = (alpha_dB / 8.69) * (freq / 1e6) * 1e2 #  attenuation-based wavenumber
 
         # Compute the Green's function propagation factor:
-        EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)).astype(dtype_complex) / np.sqrt(r)
+        EXP = np.exp(-kwa * r + 1j * np.mod(kw * r, 2 * np.pi)).astype(dtype_complex) / (4 * np.pi * r)
 
         # Directivity
         DIR_argument = kw * param.width / 2 * sinTh
