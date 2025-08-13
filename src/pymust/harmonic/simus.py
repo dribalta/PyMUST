@@ -16,7 +16,7 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         RC: np.ndarray, scatter_coords: np.ndarray, 
         param: utils.Param, options: utils.Options = None, dtype_complex = np.complex64,
         debug: bool = False,  DR: int = 30,
-        auxiliary_returns: Iterable[str] = None, is3D = False, P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None, harmonic = True):
+        auxiliary_returns: Iterable[str] = None, is3D = False, P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None):
     """
     TODO: Add docstring for simus function.
     TODO: use automatic bounds detection if bounds is None. IDEA: Try a coarse grid using linear pfield.
@@ -36,6 +36,10 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         zbound = bounds[2]
 
     if P_SPECT_grid is None:
+        if options is None:
+          options = utils.Options()
+          options.FrequencyStep = 1/4 # Make more frequency bins, as in simus
+
         _, P_SPECT_grid, IDX2, f = pfield(bounds, delaysTX, param, options, is3D = is3D)
 
     xbound_range = np.linspace(xbound[0], xbound[-1], num=P_SPECT_grid.shape[0])
@@ -58,7 +62,6 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
     assert RC.shape[0] == scatter_coords.shape[0], "RC must have the same number of elements as scatter_coords."
 
 
-    RF_SPECT = np.zeros((len(f), delaysTX.size), dtype=np.complex64)
 
     # Precompute distances and other things
     center_freq = np.argmax(np.sum(np.abs(P_SPECT_grid), axis = (0, 1) if not is3D else (0, 1, 2)))
@@ -114,23 +117,31 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
     probeFunction = param.getProbeFunction()
     alpha_dB = param.attenuation
 
+    k_reduced = 0
+    RF_SPECT = np.zeros((len(f), delaysTX.size), dtype=np.complex64)
 
-    for k, kw in enumerate(2*np.pi*f[IDX2]):
+    for k, w in enumerate(2*np.pi*f):
+        if not IDX2[k]:
+            continue
+      
         # STEP 1: Interpolate the field at the scatter coordinate
         # Interpolate the magnitude TODO: check why reversed
-        norm_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.abs(P_SPECT_grid[..., k]), method='linear')
+        norm_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.abs(P_SPECT_grid[..., k_reduced]), method='linear')
         norm_interpolated = norm_interpolator(scatter_coords)
         # Interpolate the phase
-        phase_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.angle(P_SPECT_grid[..., k]),  method='nearest')
+        phase_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.angle(P_SPECT_grid[..., k_reduced]),  method='nearest')
         phase_interpolated = phase_interpolator(scatter_coords)
-          # Correct with the distance from the closest grid point
-        phase_interpolated += distanceFromClosestGridPoint * kw / param.c
+
+        # Correct with the distance from the closest grid point
+        #phase_interpolated += distanceFromClosestGridPoint * w / param.c
         P_SPECT_interp = norm_interpolated * np.exp(1j * phase_interpolated) # Slow as hell... maybe something faster
+        print(P_SPECT_interp)
+        k_reduced += 1
 
         # STEP 2: Compute the backpropagation matrix
         # If the frequency is not included, ignore it ...
-        kw = kw / param.c # wavenumber for the current frequency.
-        kwa = (alpha_dB / 8.69) * (kw / 1e6/ 2 /np.pi) * 1e2 #  attenuation-based wavenumber
+        kw = w / param.c # wavenumber for the current frequency.
+        kwa = (alpha_dB / 8.69) * (w / 1e6/ 2 /np.pi) * 1e2 #  attenuation-based wavenumber
 
         # Compute the Green's function propagation factor:
         # TODO: use fast evaluation as in normal simus (pfield)
@@ -147,12 +158,9 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         propagation = EXP * DIR # Shape: (n_scatterers, Nelements)
 
         # STEP 3: Compute and accumulate
-        if not harmonic:
-            probe_resp = probeFunction(kw)
-        else:
-            probe_resp = probeFunction(kw - 2 * np.pi*param.fc) # For harmonic, filter around 2 times the fc
-
-        RF_SPECT[k, :] = probe_resp * ((RC * P_SPECT_interp).reshape(1, -1) @ propagation) # TODO: need to be filtered back by the probe function
+        probe_resp = probeFunction(w - 2 * np.pi*param.fc) # For harmonic, filter around 2 times the fc
+        #print(probe_resp)
+        RF_SPECT[k, :] =probe_resp * ((RC * P_SPECT_interp).reshape(1, -1) @ propagation) # TODO: need to be filtered back by the probe function
 
     # Now, we need to compute the rfftt
     param.fs = 8 * param.fc # GB: not sure 
