@@ -85,6 +85,8 @@ def impolgrid(siz: typing.Union[int, list], zmax: float, width: float, param: ut
     assert isinstance(siz, int) or len(siz)==1 or len(siz)==2,'SIZ must be [M,N] or M.'
     if isinstance(siz, int):
         siz = backend.array([siz, siz])
+    else:
+        siz = backend.to_backend(siz)
 
     assert backend.all(siz>0) and backend.issubdtype(siz.dtype, backend.integer), 'SIZ components must be positive integers.'
 

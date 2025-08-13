@@ -25,11 +25,11 @@ def average_over_last_axis(X):
         return backend.mean(X, axis = -1)
 
 eps = 1e-16
-def mysinc(x=None):
-    """Sinc function using current backend."""
-    backend = get_backend()
-    eps = 1e-16
-    return backend.sin(backend.abs(x) + eps) / (backend.abs(x) + eps)
+# def mysinc(x=None):
+#     """Sinc function using current backend."""
+#     backend = get_backend()
+#     eps = 1e-16
+#     return backend.sin(backend.abs(x) + eps) / (backend.abs(x) + eps)
 
 #GB TODO: add wait bar
 #GB TODO: allow parallelization
@@ -205,10 +205,16 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     backend = get_backend()
     if x is None or (isinstance(x, list) and len(x) == 0):
         x = backend.array([])
+    else:
+        x = backend.to_backend(x)
     if y is None or (isinstance(y, list) and len(y) == 0):
         y = backend.array([])
+    else:
+        y = backend.to_backend(y)
     if z is None or (isinstance(z, list) and len(z) == 0):
         z = backend.array([])
+    else:
+        z = backend.to_backend(z)
 
     if options is None:
         if isinstance(isQuick, utils.Options):
@@ -252,8 +258,8 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
-        delaysTX = delaysTX.reshape((1, -1))
-    delaysTX = delaysTX.astype(backend.float32)
+        delaysTX = backend.reshape(delaysTX, (1, -1))
+    delaysTX = backend.astype(delaysTX, backend.float32)
     # Check if PFIELD is called by SIMUS or MKMOVIE
     isSIMUS = False
     isMKMOVIE = False
@@ -353,7 +359,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         param.TXapodization = backend.ones((1,NumberOfElements), dtype = backend.float32)
     else:
         if len(param.TXapodization.shape) == 1:
-            param.TXapodization = param.TXapodization.reshape((1, -1))
+            param.TXapodization = backend.reshape(param.TXapodization, (1, -1))
         assert (len(param.TXapodization.shape) == 2 and param.TXapodization.shape[0] == 1) and utils.isnumeric(param.TXapodization), 'PARAM.TXapodization must be a vector'
         assert param.TXapodization.shape[1]==NumberOfElements, 'PARAM.TXapodization must be of length = (number of elements)'
 
@@ -439,7 +445,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = options.RC.astype(backend.float32)
+        options.RC = backend.astype(options.RC, backend.float32)
     
     #%------------------------------------%
     #% END of Check the OPTIONS structure %
@@ -464,16 +470,16 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         siz0 = (x.shape[0], 1)
     else:
         siz0 = x.shape
-    nx = backend.prod(x.shape)
+    nx = backend.prod(siz0)
 
     #%-- Coordinates of the points where pressure is needed
-    x = x.reshape((-1,1), order = 'F')
-    y = y.reshape((-1,1), order = 'F') # Check if y is empty
-    z = z.reshape((-1,1), order = 'F')
+    x = backend.reshape(x, (-1,1))
+    y = backend.reshape(y, (-1,1)) # Check if y is empty
+    z = backend.reshape(z, (-1,1))
 
     if isMKMOVIE:
-        x = backend.concatenate((x, backend.array(options.x).reshape((-1,1))))
-        z = backend.concatenate([z, backend.array(options.z).reshape((-1,1))])
+        x = backend.concatenate((x, backend.reshape(backend.array(options.x), (-1,1))))
+        z = backend.concatenate([z, backend.reshape(backend.array(options.z), (-1,1))])
         y = backend.concatenate([y, backend.zeros((len(options.x), 1))])
         #% Note with MKMOVIE:
         #% We must consider the points of the image grid + the points of the
@@ -482,9 +488,9 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         #% Note: there is no elevation focusing with MKMOVIE (2-D only).
 
     #% cast x, y, and z to single class
-    x = x.astype(backend.float32)
-    y = y.astype(backend.float32)
-    z = z.astype(backend.float32)
+    x = backend.astype(x, backend.float32)
+    y = backend.astype(y, backend.float32)
+    z = backend.astype(z, backend.float32)
 
     xe, ze, THe, h = param.getElementPositions()
 
@@ -496,8 +502,8 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #% (if M=1, then xi = zi = 0 for a rectilinear array).
     SegLength = ElementWidth/M
     tmp = -ElementWidth/2 + SegLength/2 + backend.arange(M)*SegLength
-    xi = tmp.reshape((1,1,M))*backend.cos(THe)[:,:,backend.newaxis]
-    zi = tmp.reshape((1,1,M))*backend.sin(-THe)[:,:,backend.newaxis]
+    xi = backend.reshape(tmp, (1,1,M))*backend.cos(THe)[:,:,backend.newaxis]
+    zi = backend.reshape(tmp, (1,1,M))*backend.sin(-THe)[:,:,backend.newaxis]
     #%-- Out-of-field points
     #% Null pressure will be assigned to out-of-field points.
     isOUT = z<0
@@ -511,11 +517,11 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #%       sinT = sine of the angle relative to the element normal axis.
     #%       r, Th, and sinT are of size [numel(x) NumberOfElements M].
     #%
-    dxi = x.reshape((-1,1,1))-xi-xe.reshape((1, -1, 1))
-    d2 = dxi**2+(z.reshape((-1,1,1))-zi-ze.reshape((1, -1, 1)))**2
+    dxi = backend.reshape(x, (-1,1,1))-xi-backend.reshape(xe, (1, -1, 1))
+    d2 = dxi**2+(backend.reshape(z, (-1,1,1))-zi-backend.reshape(ze, (1, -1, 1)))**2
 
     #%---
-    r = backend.sqrt(d2+y.reshape((-1,1,1))**2).astype(backend.float32)
+    r = backend.astype(backend.sqrt(d2+backend.reshape(y, (-1,1,1))**2), backend.float32)
     #%---
     #% we'll have 1/sqrt(r) or 1/r:
     #% small d2 values are replaced by lambda/2
@@ -524,7 +530,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     r[r<smallD] = smallD
 
     eps_sp = backend.finfo(backend.float32).eps
-    Th = backend.arcsin((dxi +eps_sp)/(backend.sqrt(d2)+eps_sp))-THe.reshape((1,-1,1))
+    Th = backend.arcsin((dxi +eps_sp)/(backend.sqrt(d2)+eps_sp))-backend.reshape(THe, (1,-1,1))
     sinT = backend.sin(Th)
     # clear dxi d2 Remove if needed for clear memory
     dxi, d2 = None, None # Clear memory if needed
@@ -659,11 +665,11 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
    # %-- EXPONENTIAL arrays of size [numel(x) NumberOfElements M]
     kw = 2*backend.pi*f[0]/c # % wavenumber
     kwa = alpha_dB/8.69*f[0]/1e6*1e2 # % attenuation-based wavenumber
-    EXP = backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)).astype(backend.complex64) #; % faster than exp(-kwa*r+1j*kw*r)
+    EXP = backend.astype(backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)), backend.complex64) #; % faster than exp(-kwa*r+1j*kw*r)
     #%-- Exponential array for the increment wavenumber dk
     dkw = 2*backend.pi*df/c
     dkwa = alpha_dB/8.69*df/1e6*1e2
-    EXPdf = backend.exp((-dkwa + 1j*dkw)*r).astype(backend.complex64)
+    EXPdf = backend.astype(backend.exp((-dkwa + 1j*dkw)*r), backend.complex64)
 
     #%-- We replace EXP by EXP.*ObliFac./r or EXP.*ObliFac./sqrt(r)
 
@@ -684,13 +690,13 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #%   backscattered echoes. We thus need the distances between the scatterers
     #%   and grid-points, and the corresponding EXP_RC matrix.
     if isMKMOVIE and options.RC is not None:
-        dx = x[:nx].reshape((-1,1))-backend.array(options.x).reshape((1, -1))
-        dz = z[:nx].reshape((-1,1))-backend.array(options.z).reshape((1,-1))
+        dx = backend.reshape(x[:nx], (-1,1))-backend.reshape(backend.array(options.x), (1, -1))
+        dz = backend.reshape(z[:nx], (-1,1))-backend.reshape(backend.array(options.z), (1,-1))
         r_RC = backend.sqrt(dx**2 + dz**2)
         
         #% EXP_RC = exp((-kwa+1i*kw)*r_RC);
-        EXP_RC = backend.exp(-kwa*r_RC + 1j*backend.mod(kw*r_RC,2*backend.pi)).astype(backend.complex64)
-        EXPdf_RC = backend.exp((-dkwa + 1j*dkw)*r_RC).astype(backend.complex64)
+        EXP_RC = backend.astype(backend.exp(-kwa*r_RC + 1j*backend.mod(kw*r_RC,2*backend.pi)), backend.complex64)
+        EXPdf_RC = backend.astype(backend.exp((-dkwa + 1j*dkw)*r_RC), backend.complex64)
 
     #%-- Simplified directivity (if not dependent on frequency)
     #% In the "simplified directivity" version, the directivity of the elements
@@ -700,7 +706,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     if not isFFD:
         kc = 2*backend.pi*fc/c # % center wavenumber
-        DIR = mysinc(kc*SegLength/2*sinT) # % directivity of each segment
+        DIR = backend.mysinc(kc*SegLength/2*sinT) # % directivity of each segment
         EXP = EXP*DIR #
         #clear DIR
 
@@ -716,7 +722,10 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         #       a good compromise.
         alpha = 1j/2*(1/Rf-1/rm)
         gamma = 1j*y**2/2/rm
-        beta2 = (-(y/rm)**2).astype(backend.complex128)
+        # Fix: y should be broadcast correctly with rm
+        # y has shape (nx, 1), rm has shape (nx, 64)
+        # We want element-wise division for each point
+        beta2 = backend.astype(-(y/rm)**2, backend.complex128)
         #clear rm
         Nmgbm = max(3,int(backend.round(nSampling/20)))
         k4mgbm = backend.round(backend.linspace(1,nSampling,Nmgbm))
@@ -727,7 +736,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #%-----------------------------%
     #% SUMMATION OVER THE SPECTRUM %
     #%-----------------------------%
-    EXP = EXP.astype(backend.complex64)
+    EXP = backend.astype(EXP, backend.complex64)
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
 
     for k  in range(nSampling):
@@ -767,7 +776,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         #%-- Directivity (if frequency-dependent)
         if isFFD: #% isFFD = true -> frequency-dependent directivity
             DIR = kw*SegLength/2*sinT
-            DIR = mysinc(DIR)
+            DIR = backend.mysinc(DIR)
 
             
         #%-- Radiation patterns of the single elements
@@ -785,7 +794,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
                 RPmono = EXP
 
         if len(RPmono.shape) == 3 and RPmono.shape[2] == 1:
-            RPmono = RPmono.reshape((RPmono.shape[0],RPmono.shape[1]))
+            RPmono = backend.reshape(RPmono, (RPmono.shape[0],RPmono.shape[1]))
         
         
         #%-- Complete the radiation patterns of the single elements by including
@@ -799,9 +808,10 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         #GB WARNING,  HERE delays are a row vector instead of a column as in matlab
 
         DELAPOD = backend.sum(backend.exp(1j*kw*c*delaysTX), 0) *APOD
-        
+        if DELAPOD.dtype != RPmono.dtype:
+            DELAPOD = backend.astype(DELAPOD, RPmono.dtype)
         #%-- Summing the radiation patterns generating by all the elements
-        RPk = RPmono@DELAPOD.reshape((-1, 1))
+        RPk = RPmono@backend.reshape(DELAPOD, (-1, 1))
         #RPk = np.einsum('ij,j->i', RPmono, DELAPOD)
         #RPk = RPk.reshape((-1,1))
 
@@ -830,7 +840,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         else:  #% using PFIELD alone
             RP = RP + backend.abs(RPk)**2; #% acoustic intensity
 
-            SPECT[k,:] = RPk.flatten(order = 'F')
+            SPECT[k,:] = backend.flatten(RPk, order = 'F')
         
         
         # USE TQDM INSTEAD
@@ -869,9 +879,9 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     #% RMS acoustic pressure (if we are in PFIELD only)
     if not (isSIMUS or isMKMOVIE):
-        RP =backend.sqrt(RP).reshape(siz0, order = 'F')
+        RP = backend.reshape(backend.sqrt(RP), siz0)
         SPECT = backend.swapaxes(SPECT, 0, 1)
-        SPECT = SPECT.reshape([siz0[0], siz0[1], nSampling], order = 'F')
+        SPECT = backend.reshape(SPECT, [siz0[0], siz0[1], nSampling])
     return RP, SPECT, IDX
 
 

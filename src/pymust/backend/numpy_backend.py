@@ -19,6 +19,10 @@ class NumpyBackend(BaseBackend):
         self._scipy_signal = None
         self._scipy_fft = None
     
+    ##################################
+    #   Abstract method redefiniton
+    ##################################
+    
     def is_available(self) -> bool:
         """Check if NumPy backend dependencies are available."""
         try:
@@ -60,17 +64,13 @@ class NumpyBackend(BaseBackend):
             import numpy as np
             self._numpy = np
         return self._numpy
-
-    # Backend-specific optimized operations can be defined here
-    def sinc(self, x: np.ndarray) -> np.ndarray:
-        """Optimized sinc function for NumPy."""
-        eps = 1e-16
-        return np.sin(np.abs(x) + eps) / (np.abs(x) + eps)
     
-    def zeros_like(self, array: np.ndarray, **kwargs) -> np.ndarray:
-        """Create zeros array with same shape and dtype."""
-        return np.zeros_like(array, **kwargs)
+    #########################################
+    #   Numpy-specific methods redefiniton   
+    #########################################
     
-    def ones_like(self, array: np.ndarray, **kwargs) -> np.ndarray:
-        """Create ones array with same shape and dtype."""
-        return np.ones_like(array, **kwargs)
+    def flatten(self, array: Any, order: str = 'C') -> np.ndarray:
+        """Flatten array with order support."""
+        if hasattr(array, 'flatten'):
+            return array.flatten(order=order)
+        return np.asarray(array).flatten(order=order)

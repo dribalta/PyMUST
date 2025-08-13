@@ -103,7 +103,7 @@ class Param(dotdict):
         else:
             #% Convex array
             chord = 2*RadiusOfCurvature*backend.sin(backend.arcsin(self.pitch/2/RadiusOfCurvature)*(NumberOfElements-1))
-            h = backend.sqrt(RadiusOfCurvature**2-chord**2/4); #% apothem
+            h = backend.array(backend.sqrt(RadiusOfCurvature**2-chord**2/4)) #% apothem
             #% https://en.wikipedia.org/wiki/Circular_segment
             #% THe = angle of the normal to element #e with respect to the z-axis
             THe = backend.linspace(backend.arctan2(-chord/2,h),backend.arctan2(chord/2,h),NumberOfElements)

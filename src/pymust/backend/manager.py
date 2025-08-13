@@ -30,14 +30,7 @@ class BackendManager:
         # Always register NumPy backend
         self.register("numpy", NumpyBackend())
         
-        # Try to register PyTorch backend if available
-        try:
-            from .pytorch_backend import PyTorchBackend
-            pytorch_backend = PyTorchBackend()
-            if pytorch_backend.is_available():
-                self.register("pytorch", pytorch_backend)
-        except ImportError:
-            pass
+        # Don't pre-register PyTorch backend - lazy load it only when requested
     
     def register(self, name: str, backend: BaseBackend):
         """Register a new backend."""
@@ -48,11 +41,21 @@ class BackendManager:
     
     def available_backends(self) -> Dict[str, bool]:
         """Get list of available backends and their availability status."""
-        return {name: backend.is_available() for name, backend in self._backends.items()}
+        backends = {name: backend.is_available() for name, backend in self._backends.items()}
+        
+        # Note: PyTorch backend is lazy-loaded, so it won't appear here until first used
+        return backends
     
     def set(self, backend_name: str) -> None:
         """Set the active backend."""
         backend_name = backend_name.lower()
+        
+        # Handle lazy loading of PyTorch backend
+        if backend_name == "pytorch" and backend_name not in self._backends:
+            from .pytorch_backend import PyTorchBackend
+            pytorch_backend = PyTorchBackend()
+            if pytorch_backend.is_available():
+                self.register("pytorch", pytorch_backend)
         
         if backend_name not in self._backends:
             available = list(self._backends.keys())

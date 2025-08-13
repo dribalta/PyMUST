@@ -90,3 +90,9 @@ class BaseBackend(ABC):
             # Input was not from this backend, convert result to match
             return self.from_backend(result, type(reference_input))
         return result
+    
+    def mysinc(self, x: Any) -> Any:
+        """
+        Specialized sinc function for this backend."""
+        eps = 1e-16
+        return self.sin(self.abs(x) + eps) / (self.abs(x) + eps)
