@@ -6,6 +6,7 @@ Defines the interface that all backend implementations must follow.
 
 from abc import ABC, abstractmethod
 from typing import Any, Union, Optional, Tuple
+import numpy as np
 
 
 class BaseBackend(ABC):
@@ -96,3 +97,9 @@ class BaseBackend(ABC):
         Specialized sinc function for this backend."""
         eps = 1e-16
         return self.sin(self.abs(x) + eps) / (self.abs(x) + eps)
+
+    def to_numpy(self, array: Any) -> np.ndarray:
+        """
+        Convert input array to a NumPy array.
+        """
+        return self.from_backend(array, np.ndarray)

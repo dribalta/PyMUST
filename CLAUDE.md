@@ -18,10 +18,44 @@ pip install git+https://github.com/creatis-ULTIM/PyMUST.git
 
 # Install from PyPI
 pip install pymust
+
+# Install with optional dependencies
+pip install pymust[pytorch]    # GPU acceleration via PyTorch
+pip install pymust[accelerated] # PyTorch + pyfftw for FFT acceleration
+```
+
+### Testing and Validation
+```bash
+# Run simple functionality test
+python simple_test.py
+
+# Run comprehensive backend system tests  
+python test_backend.py
+
+# Run backend update validation
+python test_backend_updates.py
+
+# Validate field computation (basic functionality)
+python validate_pfield.py
+
+# Compare with reference versions (if available)
+python ../compare_versions.py
+
+# Test specific field computations
+python ../test_field.py      # 2D field tests
+python ../test_field3.py     # 3D field tests
 ```
 
 ### Package Building
 The project uses modern Python packaging with `pyproject.toml` and setuptools-scm for version management.
+
+```bash
+# Build package
+python -m build
+
+# Clean build artifacts
+python setup.py clean --all
+```
 
 ## Code Architecture
 
@@ -114,7 +148,35 @@ Optional dependencies:
 
 ## Development Notes
 
+### Version Management and Build
 - The project uses setuptools-scm for automatic version management from git tags
+- Both `setup.py` and `pyproject.toml` are present - `pyproject.toml` is the modern standard
+- Build system requires setuptools>=61.0 and setuptools-scm>=8
+
+### Testing Architecture
+The repository includes multiple levels of testing:
+- **Unit Tests**: `simple_test.py`, `test_backend.py`, `test_backend_updates.py`
+- **Integration Tests**: `validate_pfield.py` validates core acoustics computations
+- **Comparison Tests**: `../compare_versions.py` compares against reference implementations
+- **Field Tests**: `../test_field.py`, `../test_field3.py` test specific acoustic field scenarios
+
+### Backend System Testing
+The backend abstraction system can be validated through:
+- `test_backend.py`: Comprehensive backend switching and type preservation tests
+- `simple_test.py`: Basic functionality verification for updated modules
+- Manual testing: Import backends and verify `pymust.backend.available()` shows correct status
+
+### Platform Considerations  
 - Parallelization support may be limited on Windows platforms
 - Small numerical differences from MATLAB version are expected
+- GPU acceleration via PyTorch backend available with optional dependencies
+- Cross-platform compatibility maintained for Windows, Linux, and macOS
+
+### Development Environment
+- Set `interactiveDevelopment = True` in `__init__.py` for easier module reloading during development
+- Use virtual environments for testing different dependency combinations
+- Test with both NumPy-only and PyTorch-enabled configurations
+
+### Upcoming Features
 - GPU acceleration and harmonic imaging features are planned for future releases
+- Differentiable rendering capabilities under development

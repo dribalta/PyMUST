@@ -23,14 +23,6 @@ def average_over_last_axis(X):
         backend = get_backend()
         return backend.mean(X, axis = -1)
 
-def get_eps():
-    backend = get_backend()
-    return backend.finfo(backend.float32).eps
-
-def mysinc(x=None):
-    backend = get_backend()
-    eps = get_eps()
-    return backend.sin(backend.abs(x) + eps) / (backend.abs(x) + eps)  # [note: In MATLAB/numpy, sinc is sin(pi*x)/(pi*x)]
  
 def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options: utils.Options = None):
     """
@@ -253,7 +245,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
         delaysTX = delaysTX.reshape((1, -1))
-    delaysTX = delaysTX.astype(backend.float32)
+    delaysTX = backend.astype(delaysTX, backend.float32)
     
     # Check if PFIELD3 is called by SIMUS3
     isSIMUS3 = False
@@ -353,7 +345,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = options.RC.astype(backend.float32)
+        options.RC = backend.astype(options.RC, backend.float32)
     
     #%----------------------------------%
     #% END of Check the PARAM structure %
@@ -447,9 +439,9 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     z = z.reshape((-1,1))
 
     # cast x, y, and z to single class
-    x = x.astype(backend.float32)
-    y = y.astype(backend.float32)
-    z = z.astype(backend.float32)
+    x = backend.astype(x, backend.float32)
+    y = backend.astype(y, backend.float32)
+    z = backend.astype(z, backend.float32)
 
     #-- Centroids of the sub-elements
     #-- note: Each elements is split into M-by-N sub-elements.
@@ -483,10 +475,10 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     dxi = x.reshape((-1,1,1))-xi-xe.reshape((1, -1, 1))
     dyi = y.reshape((-1,1,1))-yi-ye.reshape((1, -1, 1))
     d2 = dxi**2+dyi**2
-    r = backend.sqrt(d2+z.reshape((-1,1,1))**2).astype(backend.float32)
+    r = backend.astype(backend.sqrt(d2+z.reshape((-1,1,1))**2), backend.float32)
 
     eps_sp = backend.finfo(backend.float32).eps
-    cosT = (backend.expand_dims(z,axis=1)+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
+    cosT = (z[:,None]+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
     sinT = (backend.sqrt(d2)+eps_sp)/(r+eps_sp)
     cosP = (dxi+eps_sp)/(backend.sqrt(d2)+eps_sp)
     sinP = (dyi+eps_sp)/(backend.sqrt(d2)+eps_sp)
@@ -598,17 +590,17 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     #-- EXPONENTIAL arrays of size [numel(x) NumberOfElements M]
     kw = 2*backend.pi*f[0]/c # wavenumber
     kwa = alpha_dB/8.69*f[0]/1e6*1e2 # attenuation-based wavenumber
-    EXP = backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)).astype(backend.complex64) # faster than exp(-kwa*r+1j*kw*r)
+    EXP = backend.astype(backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)), backend.complex64) # faster than exp(-kwa*r+1j*kw*r)
     #-- Exponential array for the increment wavenumber dk
     dkw = 2*backend.pi*df/c
     dkwa = alpha_dB/8.69*df/1e6*1e2
-    EXPdf = backend.exp((-dkwa + 1j*dkw)*r).astype(backend.complex64)
+    EXPdf = backend.astype(backend.exp((-dkwa + 1j*dkw)*r), backend.complex64)
 
     #-- We replace EXP by EXP*ObliFac/r
     EXP = EXP*ObliFac/r
 
     #-- TX apodization
-    APOD = param.TXapodization.flatten(order='F')
+    APOD = backend.flatten(param.TXapodization, order='F')
 
     #-- Simplified directivity (if not dependent on frequency)
     # In the "simplified directivity" version, the directivities of the
@@ -618,8 +610,8 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     # EXP to reduce storage.
     if not isFFD:
         kc = 2*backend.pi*fc/c # center wavenumber
-        DIRx = mysinc(kc*SegWidth/2*cosP*sinT) # x-directivity of each segment
-        DIRy = mysinc(kc*SegHeight/2*sinP*sinT) # y-directivity of each segment
+        DIRx = backend.mysinc(kc*SegWidth/2*cosP*sinT) # x-directivity of each segment
+        DIRy = backend.mysinc(kc*SegHeight/2*sinP*sinT) # y-directivity of each segment
         EXP = EXP*DIRx*DIRy
 
 
@@ -627,7 +619,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     #%-----------------------------%
     #% SUMMATION OVER THE SPECTRUM %
     #%-----------------------------%
-    EXP = EXP.astype(backend.complex64)
+    EXP = backend.astype(EXP, backend.complex64)
 
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
 
@@ -646,8 +638,8 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
 
         #-- Directivity (if frequency-dependent)
         if isFFD: # isFFD = true -> frequency-dependent directivity
-            DIRx = mysinc(kw*SegWidth/2*cosP*sinT) # x-directivity
-            DIRy = mysinc(kw*SegHeight/2*sinP*sinT) # y-directivity
+            DIRx = backend.mysinc(kw*SegWidth/2*cosP*sinT) # x-directivity
+            DIRy = backend.mysinc(kw*SegHeight/2*sinP*sinT) # y-directivity
             DIR = DIRx*DIRy
 
         #-- Radiation patterns of the single elements

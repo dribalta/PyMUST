@@ -169,14 +169,15 @@ def txdelay3(*args):
         ValueError('Wrong input arguments.')
 
     assert isinstance(param, utils.Param),'Wrong input arguments. PARAM must be a structure.'
+    
+    backend = get_backend()
 
     #-- Coordinates of the transducer elements (xe,ye)
     assert utils.isfield(param,'elements'), 'PARAM.elements must contain the x- and y-locations of the transducer elements.'
     assert param.elements.shape[0]==2, 'PARAM.elements must have two rows that contain the x (1st row) and y (2nd row) coordinates of the transducer elements.'
-    xe = param.elements[0,:]
-    ye = param.elements[1,:]
-    
-    backend = get_backend()
+    xe = backend.to_backend(param.elements[0,:])
+    ye = backend.to_backend(param.elements[1,:])
+
     
     xe = xe.reshape((1, -1))
     ye = ye.reshape((1, -1))

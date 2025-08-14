@@ -43,7 +43,7 @@ class NumpyBackend(BaseBackend):
     
     def from_backend(self, array: np.ndarray, target_type: Optional[type] = None) -> Any:
         """Convert from NumPy array to target type if specified."""
-        if target_type is None:
+        if target_type is None or target_type is np.ndarray:
             return array
         
         # Handle conversion to other array types

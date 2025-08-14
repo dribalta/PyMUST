@@ -51,7 +51,7 @@ class BackendManager:
         backend_name = backend_name.lower()
         
         # Handle lazy loading of PyTorch backend
-        if backend_name == "pytorch" and backend_name not in self._backends:
+        if backend_name in {"torch","pytorch"} and backend_name not in self._backends:
             from .pytorch_backend import PyTorchBackend
             pytorch_backend = PyTorchBackend()
             if pytorch_backend.is_available():

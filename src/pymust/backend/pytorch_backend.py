@@ -69,10 +69,7 @@ class PyTorchBackend(BaseBackend):
     
     def from_backend(self, array: Any, target_type: Optional[type] = None) -> Any:
         """Convert from PyTorch tensor to target type if specified."""
-        if not isinstance(array, self._torch.Tensor):
-            return array
-        
-        if target_type is None:
+        if target_type is None or array is self._torch.Tensor:
             return array
         
         if hasattr(target_type, '__module__'):
