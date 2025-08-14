@@ -23,7 +23,9 @@ from .manager import (
     get_backend_name as current,
     available_backends as available,
     backend_call,
-    get_backend_function
+    get_backend_function,
+    set_precision,
+    get_precision
 )
 
 # Expose main API
@@ -33,5 +35,7 @@ __all__ = [
     'available',
     'get_backend',
     'backend_call',
-    'get_backend_function'
+    'get_backend_function',
+    'set_precision',
+    'get_precision'
 ]

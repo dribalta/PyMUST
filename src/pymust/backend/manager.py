@@ -18,6 +18,7 @@ class BackendManager:
         self._backends: Dict[str, BaseBackend] = {}
         self._current_backend: Optional[BaseBackend] = None
         self._default_backend_name = "numpy"
+        self._global_precision = "single"  # Global precision setting
         
         # Register default backends
         self._register_default_backends()
@@ -36,6 +37,9 @@ class BackendManager:
         """Register a new backend."""
         if not isinstance(backend, BaseBackend):
             raise TypeError(f"Backend must inherit from BaseBackend, got {type(backend)}")
+        
+        # Set precision to match current global setting
+        backend.set_precision(self._global_precision)
         
         self._backends[name.lower()] = backend
     
@@ -80,6 +84,25 @@ class BackendManager:
     def get_backend_name(self) -> str:
         """Get the name of the currently active backend."""
         return self.get_current().name
+    
+    def set_precision(self, precision: str) -> None:
+        """Set precision mode for all backends.
+        
+        Args:
+            precision: "single" (float32/int32/complex64) or "double" (float64/int64/complex128)
+        """
+        if precision not in ["single", "double"]:
+            raise ValueError("Precision must be 'single' or 'double'")
+        
+        self._global_precision = precision
+        
+        # Update all registered backends
+        for backend in self._backends.values():
+            backend.set_precision(precision)
+    
+    def get_precision(self) -> str:
+        """Get current global precision mode."""
+        return self._global_precision
     
     def auto_detect_backend(self, *arrays: Any) -> Optional[str]:
         """
@@ -175,3 +198,26 @@ def backend_call(func_name: str, *args, **kwargs) -> Any:
 def get_backend_function(func_name: str) -> Any:
     """Get function from current backend."""
     return getattr(_backend_manager.get_current(), func_name)
+
+
+def set_precision(precision: str) -> None:
+    """Set global precision mode for all backends.
+    
+    Args:
+        precision: "single" (float32/complex64) or "double" (float64/complex128)
+    
+    Example:
+        >>> import pymust
+        >>> pymust.backend.set_precision("double")  # Use double precision
+        >>> pymust.backend.set_precision("single")  # Use single precision (default)
+    """
+    _backend_manager.set_precision(precision)
+
+
+def get_precision() -> str:
+    """Get current global precision mode.
+    
+    Returns:
+        "single" or "double"
+    """
+    return _backend_manager.get_precision()

@@ -245,7 +245,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
         delaysTX = delaysTX.reshape((1, -1))
-    delaysTX = backend.astype(delaysTX, backend.float32)
+    delaysTX = backend.astype(delaysTX, backend.float_type)
     
     # Check if PFIELD3 is called by SIMUS3
     isSIMUS3 = False
@@ -317,7 +317,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
 
     #-- 9) Transmit apodization (no unit)
     if  'TXapodization' not in param:
-        param.TXapodization = backend.ones((1,NumberOfElements), dtype=backend.float32)
+        param.TXapodization = backend.ones((1,NumberOfElements), dtype=backend.float_type)
     else:
         if hasattr(param.TXapodization, 'shape') and len(param.TXapodization.shape) == 1:
             param.TXapodization = param.TXapodization.reshape((1, -1))
@@ -345,7 +345,7 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = backend.astype(options.RC, backend.float32)
+        options.RC = backend.astype(options.RC, backend.float_type)
     
     #%----------------------------------%
     #% END of Check the PARAM structure %
@@ -439,9 +439,9 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     z = z.reshape((-1,1))
 
     # cast x, y, and z to single class
-    x = backend.astype(x, backend.float32)
-    y = backend.astype(y, backend.float32)
-    z = backend.astype(z, backend.float32)
+    x = backend.astype(x, backend.float_type)
+    y = backend.astype(y, backend.float_type)
+    z = backend.astype(z, backend.float_type)
 
     #-- Centroids of the sub-elements
     #-- note: Each elements is split into M-by-N sub-elements.
@@ -475,10 +475,10 @@ def pfield3(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, option
     dxi = x.reshape((-1,1,1))-xi-xe.reshape((1, -1, 1))
     dyi = y.reshape((-1,1,1))-yi-ye.reshape((1, -1, 1))
     d2 = dxi**2+dyi**2
-    r = backend.astype(backend.sqrt(d2+z.reshape((-1,1,1))**2), backend.float32)
+    r = backend.astype(backend.sqrt(d2+z.reshape((-1,1,1))**2), backend.float_type)
 
-    eps_sp = backend.finfo(backend.float32).eps
-    cosT = (z[:,None]+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
+    eps_sp = backend.finfo(backend.float_type).eps
+    cosT = (z.reshape((-1,1,1))+eps_sp)/(r+eps_sp) # DR : expand dimensions to match the shape of r
     sinT = (backend.sqrt(d2)+eps_sp)/(r+eps_sp)
     cosP = (dxi+eps_sp)/(backend.sqrt(d2)+eps_sp)
     sinP = (dyi+eps_sp)/(backend.sqrt(d2)+eps_sp)

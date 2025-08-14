@@ -14,11 +14,43 @@ class BaseBackend(ABC):
     
     def __init__(self):
         self._name = self.__class__.__name__.lower().replace('backend', '')
+        self._double_precision = False  # Default to single precision
     
     @property
     def name(self) -> str:
         """Backend name identifier."""
         return self._name
+    
+    def set_precision(self, precision: str) -> None:
+        """Set precision mode for this backend.
+        
+        Args:
+            precision: "single" or "double"
+        """
+        if precision not in ["single", "double"]:
+            raise ValueError("Precision must be 'single' or 'double'")
+        self._double_precision = (precision == "double")
+    
+    @property
+    def precision(self) -> str:
+        """Get current precision mode."""
+        return "double" if self._double_precision else "single"
+    
+    # Dynamic precision properties
+    @property  
+    def float_type(self) -> Any:
+        """Get current floating point type based on precision."""
+        return self.float64 if self._double_precision else self.float32
+    
+    @property
+    def complex_type(self) -> Any:
+        """Get current complex type based on precision."""
+        return self.complex128 if self._double_precision else self.complex64
+    
+    @property
+    def int_type(self) -> Any:
+        """Get current integer type based on precision.""" 
+        return self.int64 if self._double_precision else self.int32
     
     @abstractmethod
     def is_available(self) -> bool:

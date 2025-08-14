@@ -232,7 +232,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     if y is None or len(y) == 0 or backend.all(backend.abs(y) < 1e-9):
         ElevationFocusing = False
         assert backend.array_equal(x.shape, z.shape), 'X and Z must be of same size.'
-        y = backend.zeros(x.shape, dtype=backend.float32)
+        y = backend.zeros(x.shape, dtype=backend.float_type)
     else:
         ElevationFocusing = True
         assert x.shape == y.shape and y.shape == z.shape, 'X, Y, and Z must be of same size.'
@@ -259,7 +259,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #delaysTX  should be a row vector
     if len(delaysTX.shape) == 1:
         delaysTX = backend.reshape(delaysTX, (1, -1))
-    delaysTX = backend.astype(delaysTX, backend.float32)
+    delaysTX = backend.astype(delaysTX, backend.float_type)
     # Check if PFIELD is called by SIMUS or MKMOVIE
     isSIMUS = False
     isMKMOVIE = False
@@ -356,7 +356,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     #%-- 11) Transmit apodization (no unit)
     if  'TXapodization' not in param:
-        param.TXapodization = backend.ones((1,NumberOfElements), dtype = backend.float32)
+        param.TXapodization = backend.ones((1,NumberOfElements), dtype = backend.float_type)
     else:
         if len(param.TXapodization.shape) == 1:
             param.TXapodization = backend.reshape(param.TXapodization, (1, -1))
@@ -445,7 +445,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
 
     # DR: Possibly add explanation of casting RC to single precision
     if options.RC is not None and len(options.RC):
-        options.RC = backend.astype(options.RC, backend.float32)
+        options.RC = backend.astype(options.RC, backend.float_type)
     
     #%------------------------------------%
     #% END of Check the OPTIONS structure %
@@ -488,9 +488,9 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         #% Note: there is no elevation focusing with MKMOVIE (2-D only).
 
     #% cast x, y, and z to single class
-    x = backend.astype(x, backend.float32)
-    y = backend.astype(y, backend.float32)
-    z = backend.astype(z, backend.float32)
+    x = backend.astype(x, backend.float_type)
+    y = backend.astype(y, backend.float_type)
+    z = backend.astype(z, backend.float_type)
 
     xe, ze, THe, h = param.getElementPositions()
 
@@ -521,7 +521,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     d2 = dxi**2+(backend.reshape(z, (-1,1,1))-zi-backend.reshape(ze, (1, -1, 1)))**2
 
     #%---
-    r = backend.astype(backend.sqrt(d2+backend.reshape(y, (-1,1,1))**2), backend.float32)
+    r = backend.astype(backend.sqrt(d2+backend.reshape(y, (-1,1,1))**2), backend.float_type)
     #%---
     #% we'll have 1/sqrt(r) or 1/r:
     #% small d2 values are replaced by lambda/2
@@ -529,7 +529,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     smallD = (c/fc/2)
     r[r<smallD] = smallD
 
-    eps_sp = backend.finfo(backend.float32).eps
+    eps_sp = backend.finfo(backend.float_type).eps
     Th = backend.arcsin((dxi +eps_sp)/(backend.sqrt(d2)+eps_sp))-backend.reshape(THe, (1,-1,1))
     sinT = backend.sin(Th)
     # clear dxi d2 Remove if needed for clear memory
@@ -633,11 +633,11 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     RP = 0 # % RP = Radiation Pattern
     if isSIMUS:
         #%- For SIMUS only (we need the full spectrum of RX signals):
-        SPECT = backend.zeros((nSampling, NumberOfElements), dtype = backend.complex64)
+        SPECT = backend.zeros((nSampling, NumberOfElements), dtype = backend.complex_type)
     else:
         #%- For MKMOVIE only (we need the full spectrum of the pressure field):
         #%- For using PFIELD alone we need the spectrum recieved on each point:
-        SPECT = backend.zeros((nSampling, nx), dtype = backend.complex64)
+        SPECT = backend.zeros((nSampling, nx), dtype = backend.complex_type)
 
     #%-- Obliquity factor (baffle property)
     #%   An obliquity factor is required if the baffle is not rigid.
@@ -648,7 +648,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         else: # % param.baffle is a scalar
             ObliFac = backend.cos(Th)/(backend.cos(Th)+param.baffle)
     else: # % 1 if rigid baffle
-        ObliFac = backend.ones(Th.shape, backend.float32)
+        ObliFac = backend.ones(Th.shape, backend.float_type)
 
     ObliFac[backend.abs(Th)>=backend.pi/2] = utils.eps('single')
 
@@ -665,11 +665,11 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
    # %-- EXPONENTIAL arrays of size [numel(x) NumberOfElements M]
     kw = 2*backend.pi*f[0]/c # % wavenumber
     kwa = alpha_dB/8.69*f[0]/1e6*1e2 # % attenuation-based wavenumber
-    EXP = backend.astype(backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)), backend.complex64) #; % faster than exp(-kwa*r+1j*kw*r)
+    EXP = backend.astype(backend.exp(-kwa*r + 1j*backend.mod(kw*r,2*backend.pi)), backend.complex_type) #; % faster than exp(-kwa*r+1j*kw*r)
     #%-- Exponential array for the increment wavenumber dk
     dkw = 2*backend.pi*df/c
     dkwa = alpha_dB/8.69*df/1e6*1e2
-    EXPdf = backend.astype(backend.exp((-dkwa + 1j*dkw)*r), backend.complex64)
+    EXPdf = backend.astype(backend.exp((-dkwa + 1j*dkw)*r), backend.complex_type)
 
     #%-- We replace EXP by EXP.*ObliFac./r or EXP.*ObliFac./sqrt(r)
 
@@ -695,8 +695,8 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
         r_RC = backend.sqrt(dx**2 + dz**2)
         
         #% EXP_RC = exp((-kwa+1i*kw)*r_RC);
-        EXP_RC = backend.astype(backend.exp(-kwa*r_RC + 1j*backend.mod(kw*r_RC,2*backend.pi)), backend.complex64)
-        EXPdf_RC = backend.astype(backend.exp((-dkwa + 1j*dkw)*r_RC), backend.complex64)
+        EXP_RC = backend.astype(backend.exp(-kwa*r_RC + 1j*backend.mod(kw*r_RC,2*backend.pi)), backend.complex_type)
+        EXPdf_RC = backend.astype(backend.exp((-dkwa + 1j*dkw)*r_RC), backend.complex_type)
 
     #%-- Simplified directivity (if not dependent on frequency)
     #% In the "simplified directivity" version, the directivity of the elements
@@ -736,7 +736,7 @@ def pfield(x, y, z, delaysTX, param: utils.Param, isQuick: bool = False, options
     #%-----------------------------%
     #% SUMMATION OVER THE SPECTRUM %
     #%-----------------------------%
-    EXP = backend.astype(EXP, backend.complex64)
+    EXP = backend.astype(EXP, backend.complex_type)
     # TODO GB: process several frequencies at the same time might remove some overhead of numpy calls
 
     for k  in range(nSampling):
