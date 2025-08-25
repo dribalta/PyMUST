@@ -15,10 +15,11 @@ mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: 
 def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         RC: np.ndarray, scatter_coords: np.ndarray, 
         param: utils.Param, options: utils.Options = None,
-        debug: bool = False,  DR: int = 30, useDoublePrecision = True,
-        auxiliary_returns: Iterable[str] = None, is3D = False, 
-        P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None):
+        useDoublePrecision = True,  is3D = False, 
+        P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None): 
     """
+    Does the simus using interpolation, for the harmonic.
+    P_SPECT_grid, f, and IDX2 needs to be either fully or not, if you want to reuse the result of a previous pressure field.
     TODO: Add docstring for simus function.
     TODO: use automatic bounds detection if bounds is None. IDEA: Try a coarse grid using linear pfield.
     """
@@ -119,7 +120,9 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
     alpha_dB = param.attenuation
 
     k_reduced = 0
-    RF_SPECT = np.zeros((len(f), delaysTX.size), dtype=np.complex64)
+    dtype_complex = np.complex128 if useDoublePrecision else np.complex64
+    dtype_real = np.float64 if useDoublePrecision else np.float32
+    RF_SPECT = np.zeros((len(f), delaysTX.size), dtype=dtype_complex)
 
     for k, w in enumerate(2*np.pi*f):
         if not IDX2[k]:
@@ -127,17 +130,16 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
       
         # STEP 1: Interpolate the field at the scatter coordinate
         # Interpolate the magnitude TODO: check why reversed
-        norm_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.abs(P_SPECT_grid[..., k_reduced]), method='linear')
+        norm_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.abs(P_SPECT_grid[..., k_reduced]).astype(dtype_real), method='linear')
         norm_interpolated = norm_interpolator(scatter_coords)
         # Interpolate the phase
-        phase_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.angle(P_SPECT_grid[..., k_reduced]),  method='nearest')
+        phase_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.angle(P_SPECT_grid[..., k_reduced]).astype(dtype_real),  method='nearest')
         phase_interpolated = phase_interpolator(scatter_coords)
           # Phase interpolation: Correct with the signed propagation distance from the closest grid point
         phase_interpolated += distanceFromClosestGridPoint * w / param.c
 
 
         P_SPECT_interp = norm_interpolated * np.exp(1j * phase_interpolated) # Slow as hell... maybe something faster
-        print(P_SPECT_interp)
         k_reduced += 1
 
         # STEP 2: Compute the backpropagation matrix
