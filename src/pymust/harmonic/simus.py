@@ -131,9 +131,10 @@ def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         # Interpolate the phase
         phase_interpolator = scipy.interpolate.RegularGridInterpolator(ranges, np.angle(P_SPECT_grid[..., k_reduced]),  method='nearest')
         phase_interpolated = phase_interpolator(scatter_coords)
+          # Phase interpolation: Correct with the signed propagation distance from the closest grid point
+        phase_interpolated += distanceFromClosestGridPoint * w / param.c
 
-        # Correct with the distance from the closest grid point
-        #phase_interpolated += distanceFromClosestGridPoint * w / param.c
+
         P_SPECT_interp = norm_interpolated * np.exp(1j * phase_interpolated) # Slow as hell... maybe something faster
         print(P_SPECT_interp)
         k_reduced += 1
