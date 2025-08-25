@@ -14,9 +14,10 @@ mysinc = lambda x = None: np.sin(np.abs(x) + _EPS)/ (np.abs(x) + _EPS) # [NOTE: 
 
 def simus(bounds: np.ndarray, delaysTX: np.ndarray,
         RC: np.ndarray, scatter_coords: np.ndarray, 
-        param: utils.Param, options: utils.Options = None, dtype_complex = np.complex64,
-        debug: bool = False,  DR: int = 30,
-        auxiliary_returns: Iterable[str] = None, is3D = False, P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None):
+        param: utils.Param, options: utils.Options = None,
+        debug: bool = False,  DR: int = 30, useDoublePrecision = True,
+        auxiliary_returns: Iterable[str] = None, is3D = False, 
+        P_SPECT_grid: np.ndarray = None, f = None, IDX2 = None):
     """
     TODO: Add docstring for simus function.
     TODO: use automatic bounds detection if bounds is None. IDEA: Try a coarse grid using linear pfield.
