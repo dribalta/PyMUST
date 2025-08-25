@@ -8,15 +8,29 @@ import scipy
 
 from .. import utils
 from .. import pfield as linear_pfield
+from .. import pfield3
+# 
 
-def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
-        param: utils.Param, options: utils.Options = None, * ,
+import logging
+
+def pfield(bounds: np.ndarray, delaysTX: np.ndarray,
+        param: utils.Param, options: utils.Options = None, 
         doublePrecision: bool = False, debug: bool = False,
         reducedKernel: bool = False, DR: int = 30,
-        auxiliary_returns: Iterable[str] = None):
+        auxiliary_returns: Iterable[str] = None, is3D = False):
     """
     Initial implementation of the harmonic (non-linear) field.
     """
+    if not is3D:
+        if len(bounds) == 3:
+            raise ValueError("Found 3 bounds for a 2D simulation. Is this an error?")
+        xbound = bounds[0]
+        zbound = bounds[1]
+    else:
+        xbound = bounds[0]
+        ybound = bounds[1]
+        zbound = bounds[2]
+
     # Ensure auxiliary_returns is a set of str
     if isinstance(auxiliary_returns, str):
         auxiliary_returns = {auxiliary_returns}
@@ -36,9 +50,15 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
 
     c = param.c
     lambda_ = param.c / param.fc
-
-    _, _, IDX = linear_pfield(np.array([1e-6]), None, np.array([1e-6]), delaysTX, param)
-    fs = param.f[IDX]
+    if not is3D:
+        _, _, IDX = linear_pfield(np.array([1e-6]), None, np.array([1e-6]), delaysTX, param)
+        fs = param.f[IDX]
+    else:
+        _, _, IDX = pfield3(np.array([1e-6]).reshape(1,1,1), 
+                            np.array([1e-6]).reshape(1,1,1),
+                            np.array([1e-6]).reshape(1,1,1),
+                            delaysTX, param, options=options)
+        fs = param.f[IDX]
 
     if not isinstance(xbound, np.ndarray):
         xbound = np.array([-4e-2,4e-2]) # in m
@@ -51,10 +71,11 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     Nz = np.ceil(2*range_matlab(zbound)/min(c/fs))
     Nx = round(Nx / 2) * 2 + 1
     Nz = round(Nz / 2) * 2 + 1
+    if is3D:
+        Ny = np.ceil(2*range_matlab(ybound)/min(c/fs))
+        Ny = round(Ny / 2) * 2 + 1
 
-    if debug:
-        print("DEBUG - Number of grid points in x:", Nx)
-        print("DEBUG - of grid points in z:", Nz)
+    logging.debug(f"DEBUG - Number of grid points in x: {Nx}, in z: {Nz}" + ' ' + (f"in y: {Ny}" if is3D else ""))
 
     # TODO precompute the needed RAM and check if it is too large
 
@@ -63,23 +84,54 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     param.Nz = int(Nz)
     param.xbound = xbound
     param.zbound = zbound
+    if is3D:
+        param.Ny = int(Ny)
+        param.ybound = ybound
 
     x = np.linspace(min(xbound),max(xbound),Nx)
     z = np.linspace(min(zbound),max(zbound),Nz)
     dx = np.mean(np.diff(x)) # grid spacing in x (m)
     dz = np.mean(np.diff(z)) # grid spacing in z (m)
-    X,Z = np.meshgrid(x,z)
+    if is3D:
+        y = np.linspace(min(ybound),max(ybound),Ny)
+        dy = np.mean(np.diff(y))
+        X, Y, Z = np.meshgrid(x, y, z)
+        if options is None:
+            options = utils.Options()
+        # Do it  by slices, to avoid memory issues
+        if  Ny > 32:
+            for k, _ in enumerate(y):
+                if k != 0:
+                    options.f = f.copy()
+                P0_i, P0_SPECT_i, linear_IDX = pfield3(X[:, [k], :],Y[:, [k], :], Z[:, [k], :],delaysTX,param,options=options if options else None)
+                if k == 0:
+                    P0 = np.zeros((len(x), len(y), len(z)), dtype=dtype_complex)
+                    P0_SPECT = np.zeros((len(x), len(y), len(z), len(param.f[linear_IDX])), dtype=dtype_complex)
+                    f = param.f.copy()
+                P0[:, k, :] = P0_i[:, 0, :]
+                P0_SPECT[:,k, :, :] = P0_SPECT_i[:, 0, :, :]
+        else:
+            P0, P0_SPECT, linear_IDX = pfield3(X, Y, Z, delaysTX, param, options=options if options else None)
 
-    P0, P0_SPECT, linear_IDX = linear_pfield(X,None, Z,delaysTX,param,options=options if options else None)
+    else:
+        X, Z = np.meshgrid(x, z)
+        P0, P0_SPECT, linear_IDX = linear_pfield(X,None, Z,delaysTX,param,options=options if options else None)
     if "P0" not in auxiliary_returns: del P0  # Free memory if not needed
+
+    logging.debug ("DEBUG - Finished computing P0")
+
 
     # Adjust complex precision using dtype_complex
     P0_SPECT = P0_SPECT.astype(dtype_complex)
+    
+    
+    P0_SPECT /= np.max(np.abs(P0_SPECT))  # Normalize the spectrum to avoid overflow!! Warning.
+
     IDX = np.concatenate((linear_IDX, np.zeros_like(linear_IDX))) # Extend the IDX to match the full spectrum - also negative frequencies
     f = np.concatenate((param.f, param.f + param.f[-1] + param.f[1] - param.f[0]))
     if "linear_IDX" not in auxiliary_returns: del linear_IDX  # Free memory if not needed
 
-    P02_SPECT_compact = scipy.signal.fftconvolve(P0_SPECT,P0_SPECT, 'full', axes = 2) # Convolve to obtain P0^2
+    P02_SPECT_compact = scipy.signal.fftconvolve(P0_SPECT,P0_SPECT, 'full', axes = -1) # Convolve to obtain P0^2
     if "P0_SPECT" not in auxiliary_returns: del P0_SPECT  # Free memory if not needed
 
     # Do a simulated convolution, with the indexes (and full spectra, also the negative, to obtain where are the active frequencies after convolution)
@@ -93,11 +145,24 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
     ws_P02 = 2* np.pi * fs
 
 
-    D_kernel = np.sqrt((X-X.mean() + dx/2)**2+(Z-Z.mean() + dz/2)**2)
+    if is3D:
+        D_kernel = np.sqrt((X-X.mean() + dx/2)**2 + (Y-Y.mean() + dy/2)**2 + (Z-Z.mean() + dz/2)**2)
+    else:
+        D_kernel = np.sqrt((X-X.mean() + dx/2)**2 + (Z-Z.mean() + dz/2)**2)
+    # If 3D
+    # D_kernel += np.sqrt(D_kernel**2 + (Y-Y.mean() + dy/2)**2) # 3D distance kernel
     P1_SPECT = np.zeros_like(P02_SPECT_compact, dtype=dtype_complex)
 
+    logging.debug(f"DEBUG - Number of frequencies after filtering: {len(fs)}")
+
+    pixel_size = dx * dz
+    if is3D:
+        pixel_size *= dy
+
     for k, w  in enumerate(ws_P02): # NOTE Could be parallelized
-        if reducedKernel:
+        logging.debug (f"New itertion {k}/{len(ws_P02)}, angular freq = {w}")
+
+        if reducedKernel and not is3D:
             nPointsKeep = DR/(param.attenuation * dx *fs[k]/1e4) # dx is in m, fs is in Hz, attenuation is in dB/cm/MHz
             D_kernel_effective, kernel_xbound, kernel_ybound = reduceSizeKernel(D_kernel, nPointsKeep)
             xslice = slice(kernel_xbound[0], kernel_xbound[1])
@@ -106,21 +171,42 @@ def pfield(xbound: np.ndarray, zbound: np.ndarray, delaysTX: np.ndarray,
             D_kernel_effective = D_kernel
             xslice = slice(None)
             zslice = slice(None)
+            yslice = slice(None) 
 
         k_wave = w / c
         # Compute the Green's function
-        G = (1j / 4 * scipy.special.hankel1(0, k_wave * D_kernel_effective)).astype(dtype_complex)
-        # Compute an attenuation-dependent term.
+        if not is3D:
+            G = (1j / 4 * scipy.special.hankel1(0, k_wave * D_kernel_effective)).astype(dtype_complex)
+        else:
+            G  =  np.exp(1j * k_wave * D_kernel_effective) / (4 * np.pi * D_kernel_effective) # 3D Green's function
+        G *= pixel_size
         kwa = param.attenuation / 8.69 * (w / (2 * np.pi)) / 1e6 * 1e2
         # Apply attenuation
         G *= np.exp(-kwa * D_kernel_effective)
+        if is3D:
+            # Reduce the size of the kernel if needed
+            G = G[xslice, yslice, zslice]
+        else:
+            G =  G[xslice, zslice]
         # Convolve
-        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[xslice,zslice,k], G, mode='same')
+        P1_conv = scipy.signal.fftconvolve(P02_SPECT_compact[...,k],G, mode='same')  #GB: Important, you don't  need to make the P02 smaller, but G!
 
         # Multiply by a frequency-dependent factor and scale by grid spacing.
-        P1_SPECT[xslice,zslice,k] = (w / 2) ** 2 * dx * dz * P1_conv
+        P1_SPECT[...,k] = (w / 2) ** 2 * P1_conv #  *dz if 3D ; Important, you don't  need to make the P02 smaller, but G!
 
-    P1 = np.linalg.norm(P1_SPECT, axis = 2)
+    P1 = np.linalg.norm(P1_SPECT, axis = -1)
+
+    if is3D:
+        # If 3D, we need to compute the norm across the last three axes
+        norm = np.linalg.norm(P1_SPECT.reshape((-1, P1_SPECT.shape[-1])), axis = 0)
+    else:
+        norm = np.linalg.norm(P1_SPECT, axis = (0, 1))
+
+    # Filter to the frequencies that are almost -zero
+    norm_db = to_decibel(norm)
+    filtered_freqs = norm_db > -60
+    IDX2[IDX2] = filtered_freqs
+    P1_SPECT = P1_SPECT[...,filtered_freqs]
 
     if not auxiliary_returns:
         return P1, P1_SPECT, IDX2, f

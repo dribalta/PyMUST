@@ -164,7 +164,7 @@ def simus(x_range: np.ndarray, z_range: np.ndarray, P_SPECT_grid: np.ndarray,
         propagation = EXP * DIR # Shape: (n_scatterers, Nelements)
 
         # Summation and Probe Response
-        received_spectrum = P_reemitted[:, i].reshape(1, -1) @ propagation
+        received_spectrum = P_reemitted[:, count_freqs_computed].reshape(1, -1) @ propagation
         if not harmonic:
             probe_resp = probeFunction(2 * np.pi * freq)
         else:

@@ -13,6 +13,8 @@ import numpy as np
 from scipy.special import hankel1
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import cKDTree
+from skimage.restoration import unwrap_phase
+
 
 # --- Registry for Interpolation Methods ---
 
@@ -259,7 +261,7 @@ def linear_interpolation(grid_values, scatterers, x_range, z_range):
 
     # 2. Linear interpolation for phase
     # TODO: Check (un)/wrapped phase interpolation
-    phase = np.angle(grid_values)
+    phase = unwrap_phase(np.angle(grid_values))
     interpolator_phase = RegularGridInterpolator(
         (z_range, x_range), phase,
         method='linear', bounds_error=False, fill_value=0.0
