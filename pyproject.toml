@@ -32,5 +32,13 @@ Issues = "https://github.com/creatis-ULTIM/PyMUST/issues"
 [tool.pytest.ini_options]
 markers = [
     "long: marks tests as long (deselect with '-m \"not long\"')",
+    "integration: marks integration tests",
+    "unit: marks unit tests",
+]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-ra",
 ]
 

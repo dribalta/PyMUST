@@ -1,10 +1,9 @@
 name: Test and Build
 
 on:
-  push:
-    branches: 
-      "feature/tests"
   pull_request:
+    branches: [ main ]
+  push:
     branches: [ main ]
   workflow_dispatch:
 
@@ -20,6 +19,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements_dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Install dependencies and run tests
         run: |
           pip install pytest tox tox-gh-actions
@@ -36,6 +42,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements_dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Install dependencies and run tests
         run: |
           pip install pytest tox tox-gh-actions
@@ -52,6 +65,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements_dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Install dependencies and run tests
         run: |
           pip install pytest tox tox-gh-actions
@@ -69,6 +89,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements_dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Install dependencies
         run: pip install pytest tox tox-gh-actions
       - name: Run long tests
