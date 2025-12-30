@@ -12,15 +12,6 @@ from pymust import utils
 from tests.test_config import get_standard_param, get_minimal_param
 
 
-def test_simus_missing_required_fields():
-    """Test that simus behavior with missing required fields."""
-    # NOTE: simus may not always validate all required fields upfront
-    # This test verifies the function exists and can be called
-    param = get_minimal_param()
-    # Test passes if function exists
-    assert callable(pymust.simus)
-
-
 def test_simus_dimension_mismatch():
     """Test that simus detects mismatched array dimensions."""
     param = get_standard_param()
@@ -34,13 +25,6 @@ def test_simus_dimension_mismatch():
         pymust.simus(x, z, RC, delays, param)
 
 
-def test_dasmtx_wrong_signal_dimensions():
-    """Test that dasmtx handles signal dimensions."""
-    # NOTE: dasmtx may not always validate dimensions upfront
-    # This test verifies the function exists
-    assert callable(pymust.dasmtx)
-
-
 def test_txdelay_missing_focal_point():
     """Test that txdelay requires valid focal coordinates."""
     param = get_standard_param()
@@ -52,37 +36,9 @@ def test_txdelay_missing_focal_point():
 
 def test_getparam_invalid_preset():
     """Test that getparam handles invalid transducer preset names."""
-    # Try to load a non-existent preset - raises Exception (not KeyError)
+    # Try to load a non-existent preset - raises Exception
     with pytest.raises(Exception):
         pymust.getparam('NonExistentTransducer123')
-
-
-def test_param_missing_pitch():
-    """Test that getElementPositions requires certain fields."""
-    #NOTE: Validation may happen at runtime, not upfront
-    param = get_minimal_param()
-    assert callable(param.getElementPositions)
-
-
-def test_rf2iq_missing_fc():
-    """Test that rf2iq function exists and is callable."""
-    # NOTE: Validation may happen at runtime
-    assert callable(pymust.rf2iq)
-
-
-def test_negative_sampling_frequency():
-    """Test that negative sampling frequency is handled."""
-    # NOTE: Validation may not happen upfront
-    param = get_standard_param()
-    assert hasattr(param, 'fs')
-
-
-def test_invalid_fnumber():
-    """Test that fnumber parameter can be set."""
-    # NOTE: Validation may happen at runtime
-    param = get_standard_param()
-    param.fnumber = 1.0  # Valid value
-    assert param.fnumber == 1.0
 
 
 def test_isfield_with_nonexistent_field():

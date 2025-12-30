@@ -41,23 +41,6 @@ def test_submodule_imports():
     assert True
 
 
-def test_interactive_development_false():
-    """Test that interactiveDevelopment flag is False by default."""
-    # Re-import to check the flag
-    import pymust
-    # The flag should be False in production/testing
-    # Note: This assumes the __init__.py has interactiveDevelopment = False
-    # which is the default for normal use
-    assert hasattr(pymust, '__file__')  # Package is properly initialized
-
-
-def test_utils_module_available():
-    """Test that utils module with Param and Options is available."""
-    from pymust import utils
-    assert hasattr(utils, 'Param')
-    assert hasattr(utils, 'Options')
-
-
 def test_all_functions_from_init():
     """Test that key functions are accessible directly from pymust."""
     import pymust
